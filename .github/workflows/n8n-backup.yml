@@ -1,11 +1,10 @@
-# N8N工作流自动备份（修复逻辑+单个工作流完整数据备份）
+# N8N工作流自动备份（过滤敏感信息+保留原名称+完整数据）
 name: N8N工作流自动备份
 
-# 触发规则：每天凌晨2点（UTC时间，北京时间10点）自动执行 + 支持手动触发
 on:
   schedule:
-    - cron: '0 2 * * *'
-  workflow_dispatch:
+    - cron: '0 2 * * *'  # 北京时间10点自动备份
+  workflow_dispatch:     # 手动触发
 
 jobs:
   backup:
@@ -17,95 +16,78 @@ jobs:
       - name: 安装依赖工具
         run: |
           sudo apt update && sudo apt install -y jq curl
-          # 提前创建备份目录（按时间戳命名）
           mkdir -p ./backups/$(date +%Y-%m-%d_%H-%M-%S)
 
-      - name: 导出n8n工作流（单个完整数据+保留原名称）
+      - name: 导出n8n工作流（过滤敏感信息）
         env:
           N8N_API_KEY: ${{ secrets.N8N_API_KEY }}
-          # 【需确认】你的n8n公网地址（不要加末尾的/）
-          N8N_URL: "https://n8n.lbuding.com"
+          N8N_URL: "https://n8n.lbuding.com"  # 你的n8n地址
         run: |
-          # ========== 1. 请求n8n工作流列表（仅请求1次，关闭详细输出，避免Broken pipe） ==========
-          echo "===== 开始请求n8n工作流列表 ====="
-          # 移除-v（详细输出），仅静默请求，避免内容过大导致的管道错误
+          # ========== 1. 请求工作流列表 ==========
           WORKFLOW_LIST_RESPONSE=$(curl -s -X GET "$N8N_URL/api/v1/workflows" \
             -H "X-N8N-API-KEY: $N8N_API_KEY" \
             -H "Content-Type: application/json")
 
-          # 调试：输出工作流列表的前1000字符（避免内容过多）
-          echo "===== 工作流列表预览（前1000字符） ====="
-          echo "$WORKFLOW_LIST_RESPONSE" | head -c 1000
-          echo -e "\n===== 工作流列表预览结束 ====="
-
           # ========== 2. 创建备份目录 ==========
           BACKUP_DIR=./backups/$(date +%Y-%m-%d_%H-%M-%S)
           mkdir -p $BACKUP_DIR
-          echo "===== 备份目录已创建：$BACKUP_DIR ====="
 
-          # ========== 3. 解析工作流ID（仅从data字段解析，适配你的返回结构） ==========
+          # ========== 3. 解析工作流ID并备份 ==========
           WORKFLOW_IDS=$(echo "$WORKFLOW_LIST_RESPONSE" | jq -r '.data[].id')
-          echo "===== 解析出的工作流ID：$WORKFLOW_IDS ====="
 
-          # ========== 4. 逐个获取工作流完整数据并备份（核心：解决Version not found） ==========
           for ID in $WORKFLOW_IDS; do
-            # 跳过空ID
             if [ "$ID" = "null" ] || [ -z "$ID" ]; then
-              echo "===== 跳过空ID ====="
               continue
             fi
 
-            # 获取工作流原名称（从列表中提取，避免二次请求的冗余）
+            # 获取原名称并处理非法字符
             WORKFLOW_NAME=$(echo "$WORKFLOW_LIST_RESPONSE" | jq -r --arg ID "$ID" '.data[] | select(.id == $ID) | .name')
-
-            # 替换文件名中的非法字符（仅保留合法字符，原名称不变）
-            # 非法字符：/ \ : * ? " < > | （替换为下划线），去掉开头的.和空格
             WORKFLOW_NAME=$(echo "$WORKFLOW_NAME" | sed -e 's/[\/\\:*?"<>|]/_/g' -e 's/^[. ]//g')
-
-            # 兜底：若名称为空，用ID拼接命名
             if [ "$WORKFLOW_NAME" = "null" ] || [ -z "$WORKFLOW_NAME" ]; then
               WORKFLOW_NAME="未命名工作流_$ID"
             fi
 
-            echo "===== 开始备份工作流：$WORKFLOW_NAME（ID：$ID） ====="
-
-            # 获取单个工作流的完整JSON数据（核心：替换export端点，直接获取详情）
+            # 获取工作流完整数据
             WORKFLOW_DETAIL=$(curl -s -X GET "$N8N_URL/api/v1/workflows/$ID" \
               -H "X-N8N-API-KEY: $N8N_API_KEY" \
               -H "Content-Type: application/json")
 
-            # 保存完整数据到文件（n8n导入时支持该格式）
-            echo "$WORKFLOW_DETAIL" > "$BACKUP_DIR/$WORKFLOW_NAME-$ID.json"
+            # ========== 核心：过滤敏感信息（替换各类密钥为占位符） ==========
+            # 1. 替换Apify API Token（匹配apify_api_开头的字符串）
+            WORKFLOW_DETAIL=$(echo "$WORKFLOW_DETAIL" | sed -E 's/apify_api_[a-zA-Z0-9]+/apify_api_***REDACTED***/g')
+            # 2. 替换通用API Key/Token（匹配api_key_/token_/api_token_开头的字符串）
+            WORKFLOW_DETAIL=$(echo "$WORKFLOW_DETAIL" | sed -E 's/(api_key|token|api_token)_[a-zA-Z0-9]+/\1_***REDACTED***/g')
+            # 3. 替换数字+字母组合的长密钥（如64位字符的密钥，可根据需要调整）
+            WORKFLOW_DETAIL=$(echo "$WORKFLOW_DETAIL" | sed -E 's/[a-zA-Z0-9]{32,64}/***REDACTED_KEY***/g')
+            # 4. 替换URL中的token参数（如?token=xxx）
+            WORKFLOW_DETAIL=$(echo "$WORKFLOW_DETAIL" | sed -E 's/(\?|&)token=[a-zA-Z0-9]+/\1token=***REDACTED***/g')
 
-            echo "===== 已备份：$BACKUP_DIR/$WORKFLOW_NAME-$ID.json ====="
+            # 保存过滤后的文件
+            echo "$WORKFLOW_DETAIL" > "$BACKUP_DIR/$WORKFLOW_NAME-$ID.json"
+            echo "===== 已备份并过滤敏感信息：$WORKFLOW_NAME-$ID.json ====="
           done
 
-      - name: 提交并推送备份文件到GitHub
+      - name: 提交并推送备份
         env:
           SINGLE_SECRET: ${{ secrets.N8N_API_KEY }}
-          # 【需替换】你的GitHub仓库地址
-          GITHUB_REPO_URL: "https://github.com/lengbuding1991/n8n-backups.git"
+          GITHUB_REPO_URL: "https://github.com/lengbuding1991/n8n-backups.git"  # 你的仓库地址
         run: |
-          # 配置Git提交者信息
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
 
-          # 判断Secret是否包含拼接的PAT（分隔符为|||），适配两种推送方式
+          # 适配PAT推送
           if echo "$SINGLE_SECRET" | grep -q "|||"; then
-            # 方式1：使用手动生成的PAT推送（解决内置TOKEN权限不足）
             GITHUB_PAT=$(echo "$SINGLE_SECRET" | cut -d'|||' -f2)
             PUSH_URL=$(echo "$GITHUB_REPO_URL" | sed "s/https:\/\//https:\/\/$GITHUB_PAT@/")
           else
-            # 方式2：使用GitHub内置的GITHUB_TOKEN推送（需提前设置仓库读写权限）
             PUSH_URL="$GITHUB_REPO_URL"
           fi
 
-          # 检查是否有备份文件，有则提交推送
+          # 推送文件
           if [ -n "$(ls -A ./backups 2>/dev/null)" ]; then
             git add ./backups
-            git commit -m "n8n工作流备份_$(date +%Y-%m-%d_%H-%M-%S)"
-            # 推送代码到main分支（若你的分支是master，改为master）
+            git commit -m "n8n工作流备份_$(date +%Y-%m-%d_%H-%M-%S)（已过滤敏感信息）"
             git push "$PUSH_URL" main
           else
-            echo "没有检测到备份文件，跳过提交推送"
+            echo "无备份文件，跳过推送"
           fi
