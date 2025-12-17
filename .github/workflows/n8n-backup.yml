@@ -21,37 +21,36 @@ jobs:
           # 创建备份目录（按时间戳命名，避免重复）
           mkdir -p ./backups/$(date +%Y-%m-%d_%H-%M-%S)
 
-      # 步骤3：调用n8n API导出所有工作流
+      # 步骤3：调用n8n API导出所有工作流（修改认证头+优化脚本）
       - name: 导出n8n工作流
         env:
           N8N_API_KEY: ${{ secrets.N8N_API_KEY }}  # 引用你配置的Secret
-          N8N_URL: "https://n8n.lbuding.com"  # 替换成你的n8n实际地址！
+          N8N_URL: "https://n8n.lbuding.com"  # 你的n8n地址
         run: |
-          # 新增：先请求工作流列表，保存返回内容并输出（调试用）
+          # 1. 请求n8n工作流列表（仅请求1次，使用X-N8N-API-KEY认证）
           RESPONSE=$(curl -s -X GET "$N8N_URL/api/v1/workflows" \
-            -H "Authorization: Bearer $N8N_API_KEY" \
+            -H "X-N8N-API-KEY: $N8N_API_KEY" \  # 核心修改：替换为X-N8N-API-KEY
             -H "Content-Type: application/json")
-          # 输出返回内容，方便排查问题
+          
+          # 输出返回内容（调试用，后续可保留或删除）
           echo "===== n8n API返回内容 ====="
           echo "$RESPONSE"
           echo "==========================="
-          # 获取n8n所有工作流的ID
           
-          WORKFLOW_IDS=$(curl -s -X GET "$N8N_URL/api/v1/workflows" \
-            -H "Authorization: Bearer $N8N_API_KEY" \
-            -H "Content-Type: application/json" \
-            | jq -r '.[].id')
+          # 2. 解析工作流ID（此时RESPONSE是正确的JSON数组了）
+          WORKFLOW_IDS=$(echo "$RESPONSE" | jq -r '.[].id')
           
-          # 逐个导出工作流为JSON文件
+          # 3. 逐个导出工作流为JSON文件
+          BACKUP_DIR=./backups/$(date +%Y-%m-%d_%H-%M-%S)
           for ID in $WORKFLOW_IDS; do
-            # 获取工作流名称（处理特殊字符，避免文件名出错）
+            # 获取工作流名称（处理特殊字符）
             WORKFLOW_NAME=$(curl -s -X GET "$N8N_URL/api/v1/workflows/$ID" \
-              -H "Authorization: Bearer $N8N_API_KEY" \
+              -H "X-N8N-API-KEY: $N8N_API_KEY" \  # 同样替换为X-N8N-API-KEY
               | jq -r '.name' | sed 's/[^a-zA-Z0-9_-]/_/g')
-            # 导出文件到备份目录
+            # 导出工作流文件
             curl -s -X GET "$N8N_URL/api/v1/workflows/$ID/export" \
-              -H "Authorization: Bearer $N8N_API_KEY" \
-              -o ./backups/$(date +%Y-%m-%d_%H-%M-%S)/$WORKFLOW_NAME-$ID.json
+              -H "X-N8N-API-KEY: $N8N_API_KEY" \  # 同样替换为X-N8N-API-KEY
+              -o "$BACKUP_DIR/$WORKFLOW_NAME-$ID.json"
           done
 
       # 步骤4：将备份文件推回GitHub仓库
@@ -63,5 +62,5 @@ jobs:
           # 提交备份文件
           git add ./backups
           git commit -m "n8n工作流备份 $(date +%Y-%m-%d_%H-%M-%S)"
-          # 推送到仓库（用GitHub内置的GITHUB_TOKEN，无需额外配置）
+          # 推送到仓库（用GitHub内置的GITHUB_TOKEN）
           git push origin main
