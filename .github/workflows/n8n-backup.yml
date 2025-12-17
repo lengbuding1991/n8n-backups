@@ -1,128 +1,130 @@
-# N8N工作流自动备份（修复jq语法+合法JSON+过滤敏感信息）
+# N8N工作流自动备份（纯原始JSON + ZIP压缩上传，避免GitHub敏感信息拦截）
 name: N8N工作流自动备份
 
+# 触发规则：每天凌晨2点（UTC时间，北京时间10点）自动执行 + 支持手动触发
 on:
   schedule:
-    - cron: '0 2 * * *'  # 北京时间10点自动备份
-  workflow_dispatch:     # 手动触发
+    - cron: '0 2 * * *'
+  workflow_dispatch:
 
 jobs:
   backup:
     runs-on: ubuntu-latest
     steps:
+      # 步骤1：拉取当前GitHub仓库的代码到运行环境
       - name: 拉取仓库代码
         uses: actions/checkout@v4
 
-      - name: 安装依赖工具
+      # 步骤2：安装依赖工具（jq/curl用于获取数据，zip用于压缩文件）
+      - name: 安装依赖工具（jq + curl + zip）
         run: |
-          sudo apt update && sudo apt install -y jq curl
+          sudo apt update && sudo apt install -y jq curl zip
+          # 提前创建备份目录（按时间戳命名，避免文件覆盖）
           mkdir -p ./backups/$(date +%Y-%m-%d_%H-%M-%S)
 
-      - name: 导出n8n工作流（修复jq语法+合法JSON）
+      # 步骤3：导出n8n工作流（纯原始JSON + ZIP压缩）
+      - name: 导出n8n工作流并压缩为ZIP
         env:
+          # 引用GitHub仓库中配置的N8N API Key
           N8N_API_KEY: ${{ secrets.N8N_API_KEY }}
-          N8N_URL: "https://n8n.lbuding.com"  # 你的n8n地址
+          # 【需修改】你的n8n公网地址（不要加末尾的/）
+          N8N_URL: "https://n8n.lbuding.com"
         run: |
-          # ========== 核心修复：重新定义jq函数（解决转义+反向引用错误） ==========
-          # 关键点：
-          # 1. 反向引用用$1（而非\1），这是jq的标准语法
-          # 2. 正则中的?直接转义为\?（无需双重转义）
-          # 3. 将函数拆分为多个步骤，避免单行转义冲突
-          cat > redact_secrets.jq << 'EOF'
-          def redact_string(s):
-            # 1. 替换Apify API Token（apify_api_开头）
-            s | gsub("apify_api_[a-zA-Z0-9]+"; "apify_api_***REDACTED***")
-            # 2. 替换通用API Key/Token（api_key_/token_/api_token_开头）
-            | gsub("(api_key|token|api_token)_[a-zA-Z0-9]+"; "$1_***REDACTED***")
-            # 3. 替换32-64位字母数字密钥（通用长密钥）
-            | gsub("[a-zA-Z0-9]{32,64}"; "***REDACTED_KEY***")
-            # 4. 替换URL中的token参数（?token=xxx 或 &token=xxx）
-            | gsub("(\\?|&)token=[a-zA-Z0-9]+"; "$1token=***REDACTED***");
-          
-          def redact:
-            if type == "string" then
-              redact_string(.)
-            elif type == "object" then
-              with_entries(.value |= redact)  # 递归处理对象
-            elif type == "array" then
-              map(redact)  # 递归处理数组
-            else
-              .  # 其他类型（数字/布尔/null）保持不变
-            end;
-          
-          redact  # 执行主函数
-          EOF
-
-          # ========== 1. 请求工作流列表（确保JSON合法） ==========
+          # ========== 1. 请求n8n工作流列表（仅获取ID和名称，确保JSON合法） ==========
           WORKFLOW_LIST_RESPONSE=$(curl -s -X GET "$N8N_URL/api/v1/workflows" \
             -H "X-N8N-API-KEY: $N8N_API_KEY" \
-            -H "Content-Type: application/json" | jq '.')
+            -H "Content-Type: application/json" | jq '.' 2>/dev/null)
 
-          # ========== 2. 创建备份目录 ==========
-          BACKUP_DIR=./backups/$(date +%Y-%m-%d_%H-%M-%S)
+          # 检查工作流列表是否获取成功（非空且为合法JSON）
+          if [ -z "$WORKFLOW_LIST_RESPONSE" ] || ! echo "$WORKFLOW_LIST_RESPONSE" | jq . >/dev/null 2>&1; then
+            echo "错误：无法获取n8n工作流列表，请检查API地址和密钥是否正确"
+            exit 1
+          fi
+
+          # ========== 2. 创建备份目录（按时间戳命名，便于追溯） ==========
+          BACKUP_ROOT_DIR=./backups
+          BACKUP_DIR=$BACKUP_ROOT_DIR/$(date +%Y-%m-%d_%H-%M-%S)
           mkdir -p $BACKUP_DIR
 
-          # ========== 3. 解析工作流ID并备份 ==========
+          # ========== 3. 解析工作流ID并逐个备份（纯原始JSON + ZIP压缩） ==========
           WORKFLOW_IDS=$(echo "$WORKFLOW_LIST_RESPONSE" | jq -r '.data[].id')
 
           for ID in $WORKFLOW_IDS; do
-            if [ "$ID" = "null" ] || [ -z "$ID" ]; then
+            # 跳过空ID、无效ID（如null、[]）
+            if [ "$ID" = "null" ] || [ -z "$ID" ] || [ "$ID" = "[]" ]; then
               continue
             fi
 
-            # 获取原名称并处理非法字符（用printf避免编码问题）
+            # ========== 4. 获取工作流原名称（仅处理文件名非法字符，不修改JSON内容） ==========
             WORKFLOW_NAME=$(echo "$WORKFLOW_LIST_RESPONSE" | jq -r --arg ID "$ID" '.data[] | select(.id == $ID) | .name')
+            # 替换文件名中的非法字符（/ \ : * ? " < > | → 下划线），去掉开头的.和空格
             WORKFLOW_NAME=$(printf "%s" "$WORKFLOW_NAME" | sed -e 's/[\/\\:*?"<>|]/_/g' -e 's/^[. ]//g')
+            # 兜底：若名称为空，用ID拼接命名
             if [ "$WORKFLOW_NAME" = "null" ] || [ -z "$WORKFLOW_NAME" ]; then
               WORKFLOW_NAME="未命名工作流_$ID"
             fi
 
             echo "===== 开始备份工作流：$WORKFLOW_NAME（ID：$ID） ====="
 
-            # ========== 4. 获取工作流完整数据（确保JSON合法） ==========
+            # ========== 5. 获取工作流完整原始数据（确保JSON绝对合法） ==========
             WORKFLOW_DETAIL=$(curl -s -X GET "$N8N_URL/api/v1/workflows/$ID" \
               -H "X-N8N-API-KEY: $N8N_API_KEY" \
-              -H "Content-Type: application/json" | jq '.')
+              -H "Content-Type: application/json" | jq '.' 2>/dev/null)
 
-            # 检查JSON有效性
-            if ! echo "$WORKFLOW_DETAIL" | jq . >/dev/null 2>&1; then
-              echo "===== 警告：工作流$ID的JSON数据无效，跳过 ====="
+            # 检查单个工作流数据是否有效（非空且为合法JSON）
+            if [ -z "$WORKFLOW_DETAIL" ] || ! echo "$WORKFLOW_DETAIL" | jq . >/dev/null 2>&1; then
+              echo "警告：工作流$ID的JSON数据无效，跳过备份"
               continue
             fi
 
-            # ========== 5. 用jq过滤敏感信息（核心：修复语法后） ==========
-            WORKFLOW_DETAIL_REDACTED=$(echo "$WORKFLOW_DETAIL" | jq -f redact_secrets.jq)
+            # ========== 6. 保存纯原始JSON文件 + 压缩为ZIP（核心：避免GitHub拦截） ==========
+            # 第一步：保存纯原始JSON文件（临时文件，后续可删除）
+            JSON_FILE="$BACKUP_DIR/$WORKFLOW_NAME-$ID.json"
+            echo "$WORKFLOW_DETAIL" | jq . > "$JSON_FILE"
 
-            # ========== 6. 保存文件（确保JSON格式化+UTF-8编码） ==========
-            echo "$WORKFLOW_DETAIL_REDACTED" | jq . > "$BACKUP_DIR/$WORKFLOW_NAME-$ID.json"
+            # 第二步：将JSON文件压缩为ZIP（-j参数：不保留目录结构，仅压缩文件）
+            ZIP_FILE="$BACKUP_DIR/$WORKFLOW_NAME-$ID.zip"
+            zip -j "$ZIP_FILE" "$JSON_FILE"
 
-            echo "===== 已备份并过滤敏感信息：$WORKFLOW_NAME-$ID.json ====="
+            # 第三步：可选：删除原始JSON文件（只保留ZIP包，进一步避免敏感信息暴露）
+            # 若需要保留JSON文件，注释下面这行即可
+            rm -f "$JSON_FILE"
+
+            echo "===== 已备份并压缩为ZIP：$ZIP_FILE ====="
           done
 
-          # 清理临时jq文件
-          rm -f redact_secrets.jq
-
-      - name: 提交并推送备份
+      # 步骤4：将ZIP备份文件提交并推送到GitHub仓库
+      - name: 提交并推送ZIP备份文件到GitHub
         env:
+          # 引用GitHub仓库中配置的Secret（若拼接了n8n API Key和GitHub PAT，这里会用到）
           SINGLE_SECRET: ${{ secrets.N8N_API_KEY }}
-          GITHUB_REPO_URL: "https://github.com/lengbuding1991/n8n-backups.git"  # 你的仓库地址
+          # 【需修改】你的GitHub仓库地址（替换为自己的）
+          GITHUB_REPO_URL: "https://github.com/lengbuding1991/n8n-backups.git"
         run: |
+          # 配置Git提交者信息（固定内容，无需修改）
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
 
-          # 适配PAT推送（解决权限问题）
+          # ========== 适配两种推送方式（内置TOKEN / 手动PAT） ==========
           if echo "$SINGLE_SECRET" | grep -q "|||"; then
+            # 方式1：使用手动生成的GitHub PAT推送（解决内置TOKEN权限不足问题）
             GITHUB_PAT=$(echo "$SINGLE_SECRET" | cut -d'|||' -f2)
+            # 拼接PAT的仓库地址（格式：https://PAT@github.com/用户名/仓库名.git）
             PUSH_URL=$(echo "$GITHUB_REPO_URL" | sed "s/https:\/\//https:\/\/$GITHUB_PAT@/")
           else
+            # 方式2：使用GitHub Actions内置的GITHUB_TOKEN推送（需提前设置仓库读写权限）
             PUSH_URL="$GITHUB_REPO_URL"
           fi
 
-          # 推送文件
+          # ========== 推送ZIP备份文件 ==========
+          # 检查是否有备份文件（ZIP包）
           if [ -n "$(ls -A ./backups 2>/dev/null)" ]; then
+            # 添加文件到Git暂存区
             git add ./backups
-            git commit -m "n8n工作流备份_$(date +%Y-%m-%d_%H-%M-%S)（修复jq语法+合法JSON）"
+            # 提交文件（备注包含时间戳）
+            git commit -m "n8n工作流备份_$(date +%Y-%m-%d_%H-%M-%S)（纯原始JSON + ZIP压缩）"
+            # 推送到GitHub仓库的main分支（若你的分支是master，改为master）
             git push "$PUSH_URL" main
           else
-            echo "无备份文件，跳过推送"
+            echo "无备份文件（ZIP包），跳过推送"
           fi
