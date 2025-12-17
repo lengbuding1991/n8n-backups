@@ -1,4 +1,4 @@
-# N8N工作流自动备份（合法JSON+过滤敏感信息+保留原名称）
+# N8N工作流自动备份（修复jq语法+合法JSON+过滤敏感信息）
 name: N8N工作流自动备份
 
 on:
@@ -18,36 +18,42 @@ jobs:
           sudo apt update && sudo apt install -y jq curl
           mkdir -p ./backups/$(date +%Y-%m-%d_%H-%M-%S)
 
-      - name: 导出n8n工作流（保证JSON合法+过滤敏感信息）
+      - name: 导出n8n工作流（修复jq语法+合法JSON）
         env:
           N8N_API_KEY: ${{ secrets.N8N_API_KEY }}
           N8N_URL: "https://n8n.lbuding.com"  # 你的n8n地址
         run: |
-          # 定义一个jq函数：递归遍历所有JSON值，替换敏感字符串
-          # 该函数会保留JSON结构，只替换值中的敏感内容
-          REDACT_SECRETS='
-            def redact:
-              if type == "string" then
-                # 1. 替换Apify API Token
-                gsub("apify_api_[a-zA-Z0-9]+"; "apify_api_***REDACTED***") |
-                # 2. 替换通用API Key/Token
-                gsub("(api_key|token|api_token)_[a-zA-Z0-9]+"; "\1_***REDACTED***") |
-                # 3. 替换32-64位字母数字密钥
-                gsub("[a-zA-Z0-9]{32,64}"; "***REDACTED_KEY***") |
-                # 4. 替换URL中的token参数（?token=xxx 或 &token=xxx）
-                gsub("(\\?|&)token=[a-zA-Z0-9]+"; "\1token=***REDACTED***")
-              elif type == "object" then
-                with_entries(.value |= redact)  # 递归处理对象
-              elif type == "array" then
-                map(redact)  # 递归处理数组
-              else
-                .  # 其他类型（数字/布尔/null）保持不变
-              end;
-            redact  # 执行函数
-          '
+          # ========== 核心修复：重新定义jq函数（解决转义+反向引用错误） ==========
+          # 关键点：
+          # 1. 反向引用用$1（而非\1），这是jq的标准语法
+          # 2. 正则中的?直接转义为\?（无需双重转义）
+          # 3. 将函数拆分为多个步骤，避免单行转义冲突
+          cat > redact_secrets.jq << 'EOF'
+          def redact_string(s):
+            # 1. 替换Apify API Token（apify_api_开头）
+            s | gsub("apify_api_[a-zA-Z0-9]+"; "apify_api_***REDACTED***")
+            # 2. 替换通用API Key/Token（api_key_/token_/api_token_开头）
+            | gsub("(api_key|token|api_token)_[a-zA-Z0-9]+"; "$1_***REDACTED***")
+            # 3. 替换32-64位字母数字密钥（通用长密钥）
+            | gsub("[a-zA-Z0-9]{32,64}"; "***REDACTED_KEY***")
+            # 4. 替换URL中的token参数（?token=xxx 或 &token=xxx）
+            | gsub("(\\?|&)token=[a-zA-Z0-9]+"; "$1token=***REDACTED***");
+          
+          def redact:
+            if type == "string" then
+              redact_string(.)
+            elif type == "object" then
+              with_entries(.value |= redact)  # 递归处理对象
+            elif type == "array" then
+              map(redact)  # 递归处理数组
+            else
+              .  # 其他类型（数字/布尔/null）保持不变
+            end;
+          
+          redact  # 执行主函数
+          EOF
 
-          # ========== 1. 请求工作流列表 ==========
-          # 用jq格式化，确保JSON完整（避免curl获取的原始数据有截断）
+          # ========== 1. 请求工作流列表（确保JSON合法） ==========
           WORKFLOW_LIST_RESPONSE=$(curl -s -X GET "$N8N_URL/api/v1/workflows" \
             -H "X-N8N-API-KEY: $N8N_API_KEY" \
             -H "Content-Type: application/json" | jq '.')
@@ -64,7 +70,7 @@ jobs:
               continue
             fi
 
-            # 获取原名称并处理非法字符（用printf避免echo的字符编码问题）
+            # 获取原名称并处理非法字符（用printf避免编码问题）
             WORKFLOW_NAME=$(echo "$WORKFLOW_LIST_RESPONSE" | jq -r --arg ID "$ID" '.data[] | select(.id == $ID) | .name')
             WORKFLOW_NAME=$(printf "%s" "$WORKFLOW_NAME" | sed -e 's/[\/\\:*?"<>|]/_/g' -e 's/^[. ]//g')
             if [ "$WORKFLOW_NAME" = "null" ] || [ -z "$WORKFLOW_NAME" ]; then
@@ -73,25 +79,28 @@ jobs:
 
             echo "===== 开始备份工作流：$WORKFLOW_NAME（ID：$ID） ====="
 
-            # ========== 4. 获取工作流完整数据（用jq确保JSON合法） ==========
+            # ========== 4. 获取工作流完整数据（确保JSON合法） ==========
             WORKFLOW_DETAIL=$(curl -s -X GET "$N8N_URL/api/v1/workflows/$ID" \
               -H "X-N8N-API-KEY: $N8N_API_KEY" \
               -H "Content-Type: application/json" | jq '.')
 
-            # 检查是否获取到合法JSON
+            # 检查JSON有效性
             if ! echo "$WORKFLOW_DETAIL" | jq . >/dev/null 2>&1; then
               echo "===== 警告：工作流$ID的JSON数据无效，跳过 ====="
               continue
             fi
 
-            # ========== 5. 用jq过滤敏感信息（核心：保留JSON结构） ==========
-            WORKFLOW_DETAIL_REDACTED=$(echo "$WORKFLOW_DETAIL" | jq "$REDACT_SECRETS")
+            # ========== 5. 用jq过滤敏感信息（核心：修复语法后） ==========
+            WORKFLOW_DETAIL_REDACTED=$(echo "$WORKFLOW_DETAIL" | jq -f redact_secrets.jq)
 
-            # ========== 6. 保存文件（用jq .确保JSON格式化，避免空行/截断） ==========
+            # ========== 6. 保存文件（确保JSON格式化+UTF-8编码） ==========
             echo "$WORKFLOW_DETAIL_REDACTED" | jq . > "$BACKUP_DIR/$WORKFLOW_NAME-$ID.json"
 
             echo "===== 已备份并过滤敏感信息：$WORKFLOW_NAME-$ID.json ====="
           done
+
+          # 清理临时jq文件
+          rm -f redact_secrets.jq
 
       - name: 提交并推送备份
         env:
@@ -109,10 +118,10 @@ jobs:
             PUSH_URL="$GITHUB_REPO_URL"
           fi
 
-          # 推送文件（检查是否有备份文件）
+          # 推送文件
           if [ -n "$(ls -A ./backups 2>/dev/null)" ]; then
             git add ./backups
-            git commit -m "n8n工作流备份_$(date +%Y-%m-%d_%H-%M-%S)（合法JSON+过滤敏感信息）"
+            git commit -m "n8n工作流备份_$(date +%Y-%m-%d_%H-%M-%S)（修复jq语法+合法JSON）"
             git push "$PUSH_URL" main
           else
             echo "无备份文件，跳过推送"
