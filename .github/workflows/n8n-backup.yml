@@ -21,15 +21,16 @@ jobs:
           # 创建备份目录（按时间戳命名，避免重复）
           mkdir -p ./backups/$(date +%Y-%m-%d_%H-%M-%S)
 
-      # 步骤3：调用n8n API导出所有工作流（修改认证头+优化脚本）
+      # 步骤3：调用n8n API导出所有工作流（修正语法错误）
       - name: 导出n8n工作流
         env:
           N8N_API_KEY: ${{ secrets.N8N_API_KEY }}  # 引用你配置的Secret
           N8N_URL: "https://n8n.lbuding.com"  # 你的n8n地址
         run: |
           # 1. 请求n8n工作流列表（仅请求1次，使用X-N8N-API-KEY认证）
+          # 核心修改：认证头替换为X-N8N-API-KEY（注释单独写，不跟在续行符后）
           RESPONSE=$(curl -s -X GET "$N8N_URL/api/v1/workflows" \
-            -H "X-N8N-API-KEY: $N8N_API_KEY" \  # 核心修改：替换为X-N8N-API-KEY
+            -H "X-N8N-API-KEY: $N8N_API_KEY" \
             -H "Content-Type: application/json")
           
           # 输出返回内容（调试用，后续可保留或删除）
@@ -42,14 +43,24 @@ jobs:
           
           # 3. 逐个导出工作流为JSON文件
           BACKUP_DIR=./backups/$(date +%Y-%m-%d_%H-%M-%S)
+          # 确保备份目录存在
+          mkdir -p $BACKUP_DIR
+          
           for ID in $WORKFLOW_IDS; do
+            # 跳过空ID（防止jq解析为空时循环出错）
+            if [ "$ID" = "null" ] || [ -z "$ID" ]; then
+              continue
+            fi
             # 获取工作流名称（处理特殊字符）
             WORKFLOW_NAME=$(curl -s -X GET "$N8N_URL/api/v1/workflows/$ID" \
-              -H "X-N8N-API-KEY: $N8N_API_KEY" \  # 同样替换为X-N8N-API-KEY
+              -H "X-N8N-API-KEY: $N8N_API_KEY" \
               | jq -r '.name' | sed 's/[^a-zA-Z0-9_-]/_/g')
-            # 导出工作流文件
+            # 导出工作流文件（若名称为空，用ID代替）
+            if [ "$WORKFLOW_NAME" = "null" ] || [ -z "$WORKFLOW_NAME" ]; then
+              WORKFLOW_NAME="unnamed_workflow"
+            fi
             curl -s -X GET "$N8N_URL/api/v1/workflows/$ID/export" \
-              -H "X-N8N-API-KEY: $N8N_API_KEY" \  # 同样替换为X-N8N-API-KEY
+              -H "X-N8N-API-KEY: $N8N_API_KEY" \
               -o "$BACKUP_DIR/$WORKFLOW_NAME-$ID.json"
           done
 
@@ -59,8 +70,11 @@ jobs:
           # 配置Git提交者信息
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
-          # 提交备份文件
-          git add ./backups
-          git commit -m "n8n工作流备份 $(date +%Y-%m-%d_%H-%M-%S)"
-          # 推送到仓库（用GitHub内置的GITHUB_TOKEN）
-          git push origin main
+          # 提交备份文件（若没有文件，跳过提交，避免报错）
+          if [ -n "$(ls -A ./backups 2>/dev/null)" ]; then
+            git add ./backups
+            git commit -m "n8n工作流备份 $(date +%Y-%m-%d_%H-%M-%S)"
+            git push origin main
+          else
+            echo "没有备份文件，跳过提交"
+          fi
