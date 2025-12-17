@@ -21,14 +21,13 @@ jobs:
           # 创建备份目录（按时间戳命名，避免重复）
           mkdir -p ./backups/$(date +%Y-%m-%d_%H-%M-%S)
 
-      # 步骤3：调用n8n API导出所有工作流（修正语法错误）
+      # 步骤3：调用n8n API导出所有工作流（修正jq解析逻辑）
       - name: 导出n8n工作流
         env:
           N8N_API_KEY: ${{ secrets.N8N_API_KEY }}  # 引用你配置的Secret
           N8N_URL: "https://n8n.lbuding.com"  # 你的n8n地址
         run: |
           # 1. 请求n8n工作流列表（仅请求1次，使用X-N8N-API-KEY认证）
-          # 核心修改：认证头替换为X-N8N-API-KEY（注释单独写，不跟在续行符后）
           RESPONSE=$(curl -s -X GET "$N8N_URL/api/v1/workflows" \
             -H "X-N8N-API-KEY: $N8N_API_KEY" \
             -H "Content-Type: application/json")
@@ -38,8 +37,8 @@ jobs:
           echo "$RESPONSE"
           echo "==========================="
           
-          # 2. 解析工作流ID（此时RESPONSE是正确的JSON数组了）
-          WORKFLOW_IDS=$(echo "$RESPONSE" | jq -r '.[].id')
+          # 2. 解析工作流ID（核心修正：取data字段下的id）
+          WORKFLOW_IDS=$(echo "$RESPONSE" | jq -r '.data[].id')
           
           # 3. 逐个导出工作流为JSON文件
           BACKUP_DIR=./backups/$(date +%Y-%m-%d_%H-%M-%S)
@@ -51,14 +50,17 @@ jobs:
             if [ "$ID" = "null" ] || [ -z "$ID" ]; then
               continue
             fi
-            # 获取工作流名称（处理特殊字符）
+            # 获取工作流名称（处理特殊字符，同样取data字段？不，单个工作流返回的是对象，直接取.name）
             WORKFLOW_NAME=$(curl -s -X GET "$N8N_URL/api/v1/workflows/$ID" \
               -H "X-N8N-API-KEY: $N8N_API_KEY" \
-              | jq -r '.name' | sed 's/[^a-zA-Z0-9_-]/_/g')
-            # 导出工作流文件（若名称为空，用ID代替）
+              | jq -r '.data.name' 2>/dev/null || jq -r '.name' 2>/dev/null)
+            # 处理特殊字符，防止文件名错误
+            WORKFLOW_NAME=$(echo "$WORKFLOW_NAME" | sed 's/[^a-zA-Z0-9_-]/_/g')
+            # 若名称为空，用ID代替
             if [ "$WORKFLOW_NAME" = "null" ] || [ -z "$WORKFLOW_NAME" ]; then
               WORKFLOW_NAME="unnamed_workflow"
             fi
+            # 导出工作流文件
             curl -s -X GET "$N8N_URL/api/v1/workflows/$ID/export" \
               -H "X-N8N-API-KEY: $N8N_API_KEY" \
               -o "$BACKUP_DIR/$WORKFLOW_NAME-$ID.json"
