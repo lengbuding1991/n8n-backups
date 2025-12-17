@@ -1,126 +1,130 @@
-# N8N工作流自动备份（批量导出版，解决Version not found）
+# N8N工作流自动备份（批量导出版，带全量调试日志）
 name: N8N工作流自动备份
 
-# 触发规则：每天凌晨2点（UTC时间，北京时间10点）自动执行 + 支持手动触发
 on:
   schedule:
-    - cron: '0 2 * * *'  # 如需调整备份时间，修改cron表达式即可
-  workflow_dispatch:  # 手动触发开关，在GitHub Actions页面可点击运行
+    - cron: '0 2 * * *'
+  workflow_dispatch:
 
 jobs:
   backup:
-    # 使用Ubuntu最新版运行环境
     runs-on: ubuntu-latest
     steps:
-      # 步骤1：拉取当前GitHub仓库的代码到运行环境
       - name: 拉取仓库代码
         uses: actions/checkout@v4
 
-      # 步骤2：安装必要的工具（jq用于解析JSON，curl用于请求API）
       - name: 安装依赖工具
         run: |
           sudo apt update && sudo apt install -y jq curl
-          # 提前创建备份目录（按时间戳命名，避免文件覆盖）
+          # 调试：输出已安装的工具版本
+          echo "===== 工具版本 ====="
+          jq --version
+          curl --version
           mkdir -p ./backups/$(date +%Y-%m-%d_%H-%M-%S)
 
-      # 步骤3：批量导出n8n工作流（核心步骤，解决Version not found问题）
-      - name: 批量导出n8n工作流并拆分单个文件
+      - name: 批量导出n8n工作流（带调试日志）
         env:
-          # 引用GitHub仓库中配置的Secret（已包含n8n API Key，或拼接了PAT）
           N8N_API_KEY: ${{ secrets.N8N_API_KEY }}
-          # 【需修改】你的n8n公网地址（不要加末尾的/）
-          N8N_URL: "https://n8n.lbuding.com"
+          N8N_URL: "https://n8n.lbuding.com" # 【需确认：你的n8n地址，不要加末尾/】
         run: |
-          # ========== 1. 请求n8n工作流列表，获取所有工作流的ID和名称 ==========
-          # 这里的API路径是/api/v1/workflows（根据你的n8n版本，若无效可去掉v1改为/api/workflows）
-          WORKFLOW_LIST_RESPONSE=$(curl -s -X GET "$N8N_URL/api/v1/workflows" \
-            -H "X-N8N-API-KEY: $N8N_API_KEY" \
-            -H "Content-Type: application/json")
+          # ========== 调试：输出环境变量（隐藏敏感信息） ==========
+          echo "===== 环境变量检查 ====="
+          echo "N8N_URL: $N8N_URL"
+          echo "N8N_API_KEY: ${N8N_API_KEY:0:5}***" # 只显示前5位，保护密钥
 
-          # ========== 2. 创建备份目录（按时间戳命名，便于追溯） ==========
+          # ========== 1. 请求n8n工作流列表（带错误输出） ==========
+          echo "===== 开始请求n8n工作流列表 ====="
+          # 先测试API连通性（输出curl的详细日志）
+          WORKFLOW_LIST_RESPONSE=$(curl -v -s -X GET "$N8N_URL/api/v1/workflows" \
+            -H "X-N8N-API-KEY: $N8N_API_KEY" \
+            -H "Content-Type: application/json" 2>&1) # 捕获curl的详细错误
+
+          # 调试：输出完整的API返回内容
+          echo "===== n8n工作流列表API返回内容 ====="
+          echo "$WORKFLOW_LIST_RESPONSE"
+          echo "===== API返回内容结束 ====="
+
+          # 若/api/v1/workflows失败，自动尝试/api/workflows（旧版本路径）
+          if echo "$WORKFLOW_LIST_RESPONSE" | grep -q "404\|error\|not found"; then
+            echo "===== /api/v1/workflows路径失败，尝试/api/workflows ====="
+            WORKFLOW_LIST_RESPONSE=$(curl -s -X GET "$N8N_URL/api/workflows" \
+              -H "X-N8N-API-KEY: $N8N_API_KEY" \
+              -H "Content-Type: application/json")
+            echo "===== /api/workflows返回内容 ====="
+            echo "$WORKFLOW_LIST_RESPONSE"
+          fi
+
+          # ========== 2. 创建备份目录 ==========
           BACKUP_ROOT_DIR=./backups
           BACKUP_DIR=$BACKUP_ROOT_DIR/$(date +%Y-%m-%d_%H-%M-%S)
           mkdir -p $BACKUP_DIR
+          echo "===== 备份目录已创建：$BACKUP_DIR ====="
 
-          # ========== 3. 批量导出所有工作流（核心：解决Version not found问题） ==========
-          # 尝试3种常见的批量导出路径，**哪个生效用哪个**（注释/取消注释切换）
-          # 路径1：带v1的GET请求（n8n v1.0+主流版本）【优先尝试】
+          # ========== 3. 批量导出所有工作流 ==========
+          echo "===== 开始批量导出n8n工作流 ====="
+          # 先尝试带v1的批量路径
           BATCH_BACKUP_CONTENT=$(curl -s -X GET "$N8N_URL/api/v1/workflows/export/all" \
             -H "X-N8N-API-KEY: $N8N_API_KEY" \
             -H "Content-Type: application/json")
 
-          # 路径2：去掉v1的GET请求（n8n旧版本）【若路径1无效，取消注释此段，注释路径1】
-          # BATCH_BACKUP_CONTENT=$(curl -s -X GET "$N8N_URL/api/workflows/export/all" \
-          #   -H "X-N8N-API-KEY: $N8N_API_KEY")
+          # 若失败，尝试去掉v1的批量路径
+          if echo "$BATCH_BACKUP_CONTENT" | grep -q "404\|error\|Version not found"; then
+            echo "===== /api/v1/workflows/export/all失败，尝试/api/workflows/export/all ====="
+            BATCH_BACKUP_CONTENT=$(curl -s -X GET "$N8N_URL/api/workflows/export/all" \
+              -H "X-N8N-API-KEY: $N8N_API_KEY")
+          fi
 
-          # 路径3：POST请求的批量导出（极少数n8n版本）【若前两个都无效，取消注释此段，注释前两个】
-          # BATCH_BACKUP_CONTENT=$(curl -s -X POST "$N8N_URL/api/v1/workflows/export/all" \
-          #   -H "X-N8N-API-KEY: $N8N_API_KEY" \
-          #   -H "Content-Type: application/json")
-
-          # 保存批量导出的总文件（兜底，防止拆分失败时有完整备份）
+          # 调试：输出批量导出内容
+          echo "===== 批量导出内容 ====="
+          echo "$BATCH_BACKUP_CONTENT"
+          # 保存批量总文件
           echo "$BATCH_BACKUP_CONTENT" > "$BACKUP_DIR/n8n_所有工作流_批量备份.json"
+          echo "===== 批量总文件已保存 ====="
 
-          # ========== 4. 拆分批量文件为单个工作流文件（保留原名称，便于识别） ==========
-          # 解析工作流列表中的所有ID
-          WORKFLOW_IDS=$(echo "$WORKFLOW_LIST_RESPONSE" | jq -r '.data[].id')
+          # ========== 4. 拆分单个文件 ==========
+          echo "===== 开始拆分单个工作流文件 ====="
+          # 解析工作流ID（适配data字段和直接数组）
+          WORKFLOW_IDS=$(echo "$WORKFLOW_LIST_RESPONSE" | jq -r '.data[].id' 2>/dev/null || echo "$WORKFLOW_LIST_RESPONSE" | jq -r '.[].id' 2>/dev/null)
+          echo "===== 解析出的工作流ID：$WORKFLOW_IDS ====="
 
-          # 遍历每个工作流ID，拆分文件
           for ID in $WORKFLOW_IDS; do
-            # 跳过空ID（防止解析出错）
             if [ "$ID" = "null" ] || [ -z "$ID" ]; then
               continue
             fi
 
-            # 获取工作流原名称（从工作流列表中直接提取，避免二次请求）
-            WORKFLOW_NAME=$(echo "$WORKFLOW_LIST_RESPONSE" | jq -r --arg ID "$ID" '.data[] | select(.id == $ID) | .name')
-
-            # 替换文件名中的非法字符（仅保留合法字符，原名称不变）
-            # 非法字符：/ \ : * ? " < > | （替换为下划线），去掉开头的.和空格
+            # 获取原名称（适配两种结构）
+            WORKFLOW_NAME=$(echo "$WORKFLOW_LIST_RESPONSE" | jq -r --arg ID "$ID" '.data[] | select(.id == $ID) | .name' 2>/dev/null || echo "$WORKFLOW_LIST_RESPONSE" | jq -r --arg ID "$ID" '.[] | select(.id == $ID) | .name' 2>/dev/null)
+            # 替换非法字符
             WORKFLOW_NAME=$(echo "$WORKFLOW_NAME" | sed -e 's/[\/\\:*?"<>|]/_/g' -e 's/^[. ]//g')
-
-            # 兜底：若名称为空，用ID拼接命名（防止极端情况）
             if [ "$WORKFLOW_NAME" = "null" ] || [ -z "$WORKFLOW_NAME" ]; then
               WORKFLOW_NAME="未命名工作流_$ID"
             fi
 
-            # 从批量备份内容中提取单个工作流并保存（适配两种常见的批量返回结构）
-            # 情况1：批量返回是数组（直接筛选ID）
-            echo "$BATCH_BACKUP_CONTENT" | jq -r --arg ID "$ID" '.[] | select(.id == $ID)' > "$BACKUP_DIR/$WORKFLOW_NAME-$ID.json" 2>/dev/null
-
-            # 情况2：若情况1失败，尝试批量返回是data字段包裹的数组（注释情况1，取消注释此段）
-            # echo "$BATCH_BACKUP_CONTENT" | jq -r --arg ID "$ID" '.data[] | select(.id == $ID)' > "$BACKUP_DIR/$WORKFLOW_NAME-$ID.json" 2>/dev/null
+            # 拆分单个文件（适配两种结构）
+            echo "$BATCH_BACKUP_CONTENT" | jq -r --arg ID "$ID" '.[] | select(.id == $ID)' > "$BACKUP_DIR/$WORKFLOW_NAME-$ID.json" 2>/dev/null || echo "$BATCH_BACKUP_CONTENT" | jq -r --arg ID "$ID" '.data[] | select(.id == $ID)' > "$BACKUP_DIR/$WORKFLOW_NAME-$ID.json" 2>/dev/null
+            echo "===== 已保存：$WORKFLOW_NAME-$ID.json ====="
           done
 
-      # 步骤4：将备份文件提交并推送到GitHub仓库（适配权限限制：内置TOKEN/手动PAT）
-      - name: 提交并推送备份文件到GitHub
+      - name: 提交并推送备份
         env:
-          # 引用Secret（若你是拼接了n8n API Key和GitHub PAT，这里会用到）
           SINGLE_SECRET: ${{ secrets.N8N_API_KEY }}
-          # 【需修改】你的GitHub仓库地址（替换为自己的）
-          GITHUB_REPO_URL: "https://github.com/lengbuding1991/n8n-backups.git"
+          GITHUB_REPO_URL: "https://github.com/lengbuding1991/n8n-backups.git" # 【需替换为你的仓库】
         run: |
-          # 配置Git提交者信息（固定内容，无需修改）
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
 
-          # 判断Secret是否包含拼接的PAT（分隔符为|||），适配两种推送方式
+          # 适配PAT推送
           if echo "$SINGLE_SECRET" | grep -q "|||"; then
-            # 方式1：使用手动生成的PAT推送（解决内置TOKEN权限不足）
             GITHUB_PAT=$(echo "$SINGLE_SECRET" | cut -d'|||' -f2)
-            # 拼接PAT的仓库地址（避免403权限错误）
             PUSH_URL=$(echo "$GITHUB_REPO_URL" | sed "s/https:\/\//https:\/\/$GITHUB_PAT@/")
           else
-            # 方式2：使用GitHub内置的GITHUB_TOKEN推送（需提前设置仓库读写权限）
             PUSH_URL="$GITHUB_REPO_URL"
           fi
 
-          # 检查是否有备份文件，有则提交推送
           if [ -n "$(ls -A ./backups 2>/dev/null)" ]; then
             git add ./backups
             git commit -m "n8n工作流备份_$(date +%Y-%m-%d_%H-%M-%S)"
-            # 推送代码到仓库（main分支，若你的分支是master，改为master）
             git push "$PUSH_URL" main
           else
-            echo "没有检测到备份文件，跳过提交推送"
+            echo "无备份文件，跳过推送"
           fi
