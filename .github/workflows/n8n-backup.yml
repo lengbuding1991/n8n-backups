@@ -1,82 +1,83 @@
 name: N8N工作流自动备份
 
-# 触发规则：每天凌晨2点自动备份 + 支持手动触发
 on:
   schedule:
-    - cron: '0 2 * * *'  # UTC时间，北京时间需改为'0 10 * * *'（UTC+8）
-  workflow_dispatch:  # 手动触发开关
+    - cron: '0 2 * * *'  # 北京时间10点（UTC+8）
+  workflow_dispatch:
 
 jobs:
   backup:
     runs-on: ubuntu-latest
     steps:
-      # 步骤1：拉取当前GitHub仓库代码
       - name: 拉取仓库代码
         uses: actions/checkout@v4
 
-      # 步骤2：安装必要工具（jq用于解析JSON）
       - name: 安装依赖工具
         run: |
           sudo apt update && sudo apt install -y jq curl
-          # 创建备份目录（按时间戳命名，避免重复）
           mkdir -p ./backups/$(date +%Y-%m-%d_%H-%M-%S)
 
-      # 步骤3：调用n8n API导出所有工作流（修正jq解析逻辑）
-      - name: 导出n8n工作流
+      - name: 导出n8n工作流（保留原名称）
         env:
-          N8N_API_KEY: ${{ secrets.N8N_API_KEY }}  # 引用你配置的Secret
-          N8N_URL: "https://n8n.lbuding.com"  # 你的n8n地址
+          N8N_API_KEY: ${{ secrets.N8N_API_KEY }}
+          N8N_URL: "https://n8n.lbuding.com"
         run: |
-          # 1. 请求n8n工作流列表（仅请求1次，使用X-N8N-API-KEY认证）
+          # 1. 请求工作流列表
           RESPONSE=$(curl -s -X GET "$N8N_URL/api/v1/workflows" \
             -H "X-N8N-API-KEY: $N8N_API_KEY" \
             -H "Content-Type: application/json")
           
-          # 输出返回内容（调试用，后续可保留或删除）
-          echo "===== n8n API返回内容 ====="
-          echo "$RESPONSE"
-          echo "==========================="
-          
-          # 2. 解析工作流ID（核心修正：取data字段下的id）
+          # 2. 解析工作流ID（data字段下）
           WORKFLOW_IDS=$(echo "$RESPONSE" | jq -r '.data[].id')
           
-          # 3. 逐个导出工作流为JSON文件
+          # 3. 逐个导出
           BACKUP_DIR=./backups/$(date +%Y-%m-%d_%H-%M-%S)
-          # 确保备份目录存在
           mkdir -p $BACKUP_DIR
           
           for ID in $WORKFLOW_IDS; do
-            # 跳过空ID（防止jq解析为空时循环出错）
             if [ "$ID" = "null" ] || [ -z "$ID" ]; then
               continue
             fi
-            # 获取工作流名称（处理特殊字符，同样取data字段？不，单个工作流返回的是对象，直接取.name）
-            WORKFLOW_NAME=$(curl -s -X GET "$N8N_URL/api/v1/workflows/$ID" \
-              -H "X-N8N-API-KEY: $N8N_API_KEY" \
-              | jq -r '.data.name' 2>/dev/null || jq -r '.name' 2>/dev/null)
-            # 处理特殊字符，防止文件名错误
-            WORKFLOW_NAME=$(echo "$WORKFLOW_NAME" | sed 's/[^a-zA-Z0-9_-]/_/g')
-            # 若名称为空，用ID代替
+
+            # 【核心优化1：从工作流列表中直接获取名称（无需二次请求）】
+            # 从最初的RESPONSE中提取名称（避免二次请求单个工作流，效率更高）
+            WORKFLOW_NAME=$(echo "$RESPONSE" | jq -r --arg ID "$ID" '.data[] | select(.id == $ID) | .name')
+
+            # 【核心优化2：只替换文件名非法字符，保留原名称】
+            # 非法字符：/ \ : * ? " < > | （替换为下划线，其他字符保留）
+            WORKFLOW_NAME=$(echo "$WORKFLOW_NAME" | sed -e 's/[\/\\:*?"<>|]/_/g' -e 's/^[. ]//g')
+
+            # 兜底：若名称为空，用ID代替（防止极端情况）
             if [ "$WORKFLOW_NAME" = "null" ] || [ -z "$WORKFLOW_NAME" ]; then
-              WORKFLOW_NAME="unnamed_workflow"
+              WORKFLOW_NAME="unnamed_workflow_$ID"
             fi
+
             # 导出工作流文件
             curl -s -X GET "$N8N_URL/api/v1/workflows/$ID/export" \
               -H "X-N8N-API-KEY: $N8N_API_KEY" \
               -o "$BACKUP_DIR/$WORKFLOW_NAME-$ID.json"
           done
 
-      # 步骤4：将备份文件推回GitHub仓库
       - name: 提交并推送备份
+        env:
+          SINGLE_SECRET: ${{ secrets.N8N_API_KEY }}
         run: |
-          # 配置Git提交者信息
+          # 拆分Secret（若你用了拼接的PAT，保留这部分；若用方案1权限，可删除拆分逻辑，直接用内置TOKEN）
+          if echo "$SINGLE_SECRET" | grep -q "|||"; then
+            GITHUB_PAT=$(echo $SINGLE_SECRET | cut -d'|||' -f2)
+            REMOTE_URL="https://$GITHUB_PAT@github.com/lengbuding1991/n8n-backups.git"
+          else
+            REMOTE_URL="origin"
+          fi
+
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
-          # 提交备份文件（若没有文件，跳过提交，避免报错）
+
           if [ -n "$(ls -A ./backups 2>/dev/null)" ]; then
             git add ./backups
             git commit -m "n8n工作流备份 $(date +%Y-%m-%d_%H-%M-%S)"
-            git push origin main
+            # 推送（适配两种方式）
+            git push $REMOTE_URL main
           else
             echo "没有备份文件，跳过提交"
           fi
