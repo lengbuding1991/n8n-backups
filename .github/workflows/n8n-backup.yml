@@ -25,7 +25,7 @@ jobs:
       - name: 导出n8n工作流
         env:
           N8N_API_KEY: ${{ secrets.N8N_API_KEY }}  # 引用你配置的Secret
-          N8N_URL: "https://你的n8n公网地址"  # 替换成你的n8n实际地址！
+          N8N_URL: "https://n8n.lbuding.com"  # 替换成你的n8n实际地址！
         run: |
           # 新增：先请求工作流列表，保存返回内容并输出（调试用）
           RESPONSE=$(curl -s -X GET "$N8N_URL/api/v1/workflows" \
