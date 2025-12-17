@@ -1,0 +1,408 @@
+{
+  "updatedAt": "2025-12-16T12:36:48.861Z",
+  "createdAt": "2025-12-16T12:36:48.861Z",
+  "id": "zmsax0WhKnUisMBc",
+  "name": "抖音视频无水印下载",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "get_douyin_url",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -688,
+        16
+      ],
+      "id": "bc784244-eb67-4ba4-82ba-888ab8eae3cd",
+      "name": "Webhook",
+      "webhookId": "72882a34-9eb8-4571-87e6-e5dd17daad4c"
+    },
+    {
+      "parameters": {
+        "url": "https://api.bugpk.com/api/douyin",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "=url",
+              "value": "={{ $json.url }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -240,
+        16
+      ],
+      "id": "459d8f9f-a006-4318-958d-6bb26fd66369",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "4286800a-6b29-4365-be15-60c2abbd08f7",
+              "name": "data.url",
+              "value": "={{ $json.data.url }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        0,
+        0
+      ],
+      "id": "c09278ae-d9bc-4cda-bff5-19c5ec9f9140",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        176,
+        16
+      ],
+      "id": "09dcc5d1-fb9b-4622-91f8-0363c3219370",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "402dd49a-7563-496c-a479-105c9f93f665",
+              "name": "url",
+              "value": "={{ $json.body.url || $json.query.url ||$json.url }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -480,
+        16
+      ],
+      "id": "0eda932d-2d28-42fd-b82c-4495983ebe16",
+      "name": "提取视频"
+    }
+  ],
+  "connections": {
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "提取视频",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "提取视频": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {},
+  "versionId": "daf319de-d939-4980-9ffc-c281c6502acd",
+  "activeVersionId": "daf319de-d939-4980-9ffc-c281c6502acd",
+  "versionCounter": 3,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2025-12-16T12:36:48.865Z",
+      "createdAt": "2025-12-16T12:36:48.865Z",
+      "role": "workflow:owner",
+      "workflowId": "zmsax0WhKnUisMBc",
+      "projectId": "2hoECj5RzPkbXIK6",
+      "project": {
+        "updatedAt": "2025-12-16T12:31:47.827Z",
+        "createdAt": "2025-12-16T12:30:18.158Z",
+        "id": "2hoECj5RzPkbXIK6",
+        "name": "冷 布丁 <498128186@qq.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "projectRelations": [
+          {
+            "updatedAt": "2025-12-16T12:30:18.159Z",
+            "createdAt": "2025-12-16T12:30:18.159Z",
+            "userId": "c46ce840-de81-412d-a160-69fb3885a0dd",
+            "projectId": "2hoECj5RzPkbXIK6",
+            "user": {
+              "updatedAt": "2025-12-17T05:04:54.000Z",
+              "createdAt": "2025-12-16T12:30:17.247Z",
+              "id": "c46ce840-de81-412d-a160-69fb3885a0dd",
+              "email": "498128186@qq.com",
+              "firstName": "冷",
+              "lastName": "布丁",
+              "personalizationAnswers": {
+                "version": "v4",
+                "personalization_survey_submitted_at": "2025-12-16T12:31:51.645Z",
+                "personalization_survey_n8n_version": "2.0.2"
+              },
+              "settings": {
+                "userActivated": false,
+                "easyAIWorkflowOnboarded": true
+              },
+              "disabled": false,
+              "mfaEnabled": false,
+              "lastActiveAt": "2025-12-17",
+              "isPending": false
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2025-12-16T12:40:57.000Z",
+    "createdAt": "2025-12-16T12:36:48.867Z",
+    "versionId": "daf319de-d939-4980-9ffc-c281c6502acd",
+    "workflowId": "zmsax0WhKnUisMBc",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "get_douyin_url",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          -688,
+          16
+        ],
+        "id": "bc784244-eb67-4ba4-82ba-888ab8eae3cd",
+        "name": "Webhook",
+        "webhookId": "72882a34-9eb8-4571-87e6-e5dd17daad4c"
+      },
+      {
+        "parameters": {
+          "url": "https://api.bugpk.com/api/douyin",
+          "sendQuery": true,
+          "queryParameters": {
+            "parameters": [
+              {
+                "name": "=url",
+                "value": "={{ $json.url }}"
+              }
+            ]
+          },
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Accept",
+                "value": "application/json"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          -240,
+          16
+        ],
+        "id": "459d8f9f-a006-4318-958d-6bb26fd66369",
+        "name": "HTTP Request"
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "4286800a-6b29-4365-be15-60c2abbd08f7",
+                "name": "data.url",
+                "value": "={{ $json.data.url }}",
+                "type": "string"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          0,
+          0
+        ],
+        "id": "c09278ae-d9bc-4cda-bff5-19c5ec9f9140",
+        "name": "Edit Fields"
+      },
+      {
+        "parameters": {
+          "respondWith": "allIncomingItems",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.4,
+        "position": [
+          176,
+          16
+        ],
+        "id": "09dcc5d1-fb9b-4622-91f8-0363c3219370",
+        "name": "Respond to Webhook"
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "402dd49a-7563-496c-a479-105c9f93f665",
+                "name": "url",
+                "value": "={{ $json.body.url || $json.query.url ||$json.url }}",
+                "type": "string"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          -480,
+          16
+        ],
+        "id": "0eda932d-2d28-42fd-b82c-4495983ebe16",
+        "name": "提取视频"
+      }
+    ],
+    "connections": {
+      "HTTP Request": {
+        "main": [
+          [
+            {
+              "node": "Edit Fields",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Webhook": {
+        "main": [
+          [
+            {
+              "node": "提取视频",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Edit Fields": {
+        "main": [
+          [
+            {
+              "node": "Respond to Webhook",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "提取视频": {
+        "main": [
+          [
+            {
+              "node": "HTTP Request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "冷 布丁",
+    "name": "Version daf319de",
+    "description": "",
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2025-12-16T12:40:57.625Z",
+        "id": 2,
+        "workflowId": "zmsax0WhKnUisMBc",
+        "versionId": "daf319de-d939-4980-9ffc-c281c6502acd",
+        "event": "activated",
+        "userId": "c46ce840-de81-412d-a160-69fb3885a0dd"
+      }
+    ]
+  }
+}

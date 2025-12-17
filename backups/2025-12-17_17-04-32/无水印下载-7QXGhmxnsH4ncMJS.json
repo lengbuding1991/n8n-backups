@@ -1,0 +1,1656 @@
+{
+  "updatedAt": "2025-12-16T12:36:59.109Z",
+  "createdAt": "2025-12-16T12:36:59.109Z",
+  "id": "7QXGhmxnsH4ncMJS",
+  "name": "无水印下载",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// n8n Chat节点URL提取器\n// 专门处理从n8n Chat节点传递过来的消息\n\n// 第一句代码：接收n8n Chat节点传递的数据\nconst chatMessage = $json.body;\n\nconsole.log('=== n8n Chat节点URL提取开始 ===');\nconsole.log('接收到的消息类型:', typeof chatMessage);\nconsole.log('原始消息内容:', JSON.stringify(chatMessage, null, 2));\n\n/**\n * 从Chat消息中提取文本内容\n * @param {Object} message - Chat节点传递的消息对象\n * @returns {string} 提取到的文本内容\n */\nfunction extractTextFromChatMessage(message) {\n    if (!message) {\n        return '';\n    }\n    \n    // Chat节点可能传递的不同格式\n    if (typeof message === 'string') {\n        return message;\n    }\n    \n    if (typeof message === 'object') {\n        // 常见Chat消息格式\n        if (message.text) {\n            return message.text;\n        }\n        if (message.message) {\n            return message.message;\n        }\n        if (message.content) {\n            return message.content;\n        }\n        if (message.body) {\n            return message.body;\n        }\n        \n        // 如果是数组，尝试提取第一个元素的文本\n        if (Array.isArray(message) && message.length > 0) {\n            return extractTextFromChatMessage(message[0]);\n        }\n        \n        // 如果是复杂对象，转换为JSON字符串\n        return JSON.stringify(message);\n    }\n    \n    return String(message);\n}\n\n/**\n * 从文本中提取URL链接\n * @param {string} text - 要处理的文本\n * @returns {string|null} 提取到的URL链接\n */\nfunction extractUrlFromText(text) {\n    if (!text || typeof text !== 'string') {\n        console.log('❌ 文本内容为空或不是字符串');\n        return null;\n    }\n    \n    console.log('📝 处理文本内容:', text.substring(0, 100) + (text.length > 100 ? '...' : ''));\n    \n    // 改进的URL正则表达式，支持更多格式，避免包含中文标点\n    const urlRegex = /https?:\\/\\/[^\\s\\\"<>{}|\\\\^`\\[\\]\\u4e00-\\u9fff，。！？；：\"“”‘’]+/gi;\n    const matches = text.match(urlRegex);\n    \n    if (matches && matches.length > 0) {\n        const foundUrl = matches[0];\n        console.log('✅ 找到URL:', foundUrl);\n        return foundUrl;\n    } else {\n        console.log('❌ 未找到URL链接');\n        return null;\n    }\n}\n\n/**\n * 提取所有URL链接\n * @param {string} text - 要处理的文本\n * @returns {string[]} 所有找到的URL链接\n */\nfunction extractAllUrlsFromText(text) {\n    if (!text || typeof text !== 'string') {\n        return [];\n    }\n    \n    const urlRegex = /https?:\\/\\/[^\\s\\\"<>{}|\\\\^`\\[\\]]+/gi;\n    const matches = text.match(urlRegex) || [];\n    \n    console.log(`🔍 找到 ${matches.length} 个URL链接`);\n    return matches;\n}\n\n// 主处理逻辑\nlet extractedText = '';\nlet voido_url = null;\nlet all_urls = [];\n\n// 1. 从Chat消息中提取文本\nconsole.log('\\n--- 步骤1: 提取文本内容 ---');\nextractedText = extractTextFromChatMessage(chatMessage);\nconsole.log('✅ 提取到的文本:', extractedText.substring(0, 150) + (extractedText.length > 150 ? '...' : ''));\n\n// 2. 从文本中提取URL\nconsole.log('\\n--- 步骤2: 提取URL链接 ---');\nif (extractedText) {\n    voido_url = extractUrlFromText(extractedText);\n    all_urls = extractAllUrlsFromText(extractedText);\n}\n\n// 3. 输出结果\nconsole.log('\\n--- 最终结果 ---');\nif (voido_url) {\n    console.log('🎉 成功提取到voido_url:', voido_url);\n    \n    // URL分析\n    console.log('📊 URL分析:');\n    console.log('  - 协议:', voido_url.startsWith('https') ? 'HTTPS' : 'HTTP');\n    console.log('  - 域名:', voido_url.split('/')[2]);\n    console.log('  - 路径:', voido_url.split('/').slice(3).join('/'));\n    \n    if (all_urls.length > 1) {\n        console.log('  - 其他URL:', all_urls.slice(1));\n    }\n} else {\n    console.log('💔 未能提取到URL链接');\n}\n\nconsole.log('\\n=== n8n Chat节点URL提取结束 ===');\n\n// 返回结果给n8n工作流\nreturn {\n    voido_url: voido_url,\n    all_urls: all_urls,\n    extracted_text: extractedText,\n    success: !!voido_url,\n    message: voido_url ? `成功提取${all_urls.length}个URL` : '未找到URL',\n    url_count: all_urls.length,\n    original_message: chatMessage\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1696,
+        208
+      ],
+      "id": "8ff83c7c-8cbb-4557-93e8-5542a0967a70",
+      "name": "提取URL地址"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "29289767-439a-4e55-9c32-79c9c268335a",
+              "name": "platform",
+              "value": "={{ $json.platform }}",
+              "type": "string"
+            },
+            {
+              "id": "c444a53b-7950-4e91-a224-1a324e209c98",
+              "name": "original_data.all_urls",
+              "value": "={{ $json.original_data.all_urls }}",
+              "type": "array"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1248,
+        208
+      ],
+      "id": "1cdf135b-33ba-47bf-bfc6-13448d3c9c7b",
+      "name": "清理数据，保留平台信息与URL"
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Function节点 - URL平台识别器\n// 用于识别URL属于抖音、小红书、快手等平台\n\n// n8n工作流数据接收\nconst response = $json;\n\nconsole.log('🔍 开始URL平台识别...');\n\n// 提取URL函数\nfunction extractUrlFromData(data) {\n    if (!data) {\n        console.log('❌ 输入数据为空');\n        return null;\n    }\n    \n    // 如果数据是字符串，尝试直接提取URL\n    if (typeof data === 'string') {\n        const urlRegex = /https?:\\/\\/[^\\s\"<>{}|\\\\^`\\[\\]\\u4e00-\\u9fff，。！？；：\"“”‘’]+/gi;\n        const matches = data.match(urlRegex);\n        if (matches && matches.length > 0) {\n            console.log(`✅ 从字符串中提取到URL: ${matches[0]}`);\n            return matches[0];\n        }\n    }\n    \n    // 如果数据是对象，深度搜索URL字段\n    if (typeof data === 'object' && data !== null) {\n        // 优先搜索常见URL字段\n        const urlFields = ['url', 'link', 'href', 'video_url', 'douyin_url', 'xiaohongshu_url', 'kuaishou_url'];\n        \n        for (const field of urlFields) {\n            if (data[field] && typeof data[field] === 'string') {\n                const urlRegex = /https?:\\/\\/[^\\s\"<>{}|\\\\^`\\[\\]\\u4e00-\\u9fff，。！？；：\"“”‘’]+/gi;\n                const matches = data[field].match(urlRegex);\n                if (matches && matches.length > 0) {\n                    console.log(`✅ 从字段\"${field}\"中提取到URL: ${matches[0]}`);\n                    return matches[0];\n                }\n            }\n        }\n        \n        // 深度搜索对象中的URL\n        function deepSearch(obj) {\n            if (typeof obj === 'string') {\n                const urlRegex = /https?:\\/\\/[^\\s\"<>{}|\\\\^`\\[\\]\\u4e00-\\u9fff，。！？；：\"“”‘’]+/gi;\n                const matches = obj.match(urlRegex);\n                if (matches && matches.length > 0) {\n                    return matches[0];\n                }\n            } else if (typeof obj === 'object' && obj !== null) {\n                for (const key in obj) {\n                    if (obj.hasOwnProperty(key)) {\n                        const result = deepSearch(obj[key]);\n                        if (result) return result;\n                    }\n                }\n            }\n            return null;\n        }\n        \n        const foundUrl = deepSearch(data);\n        if (foundUrl) {\n            console.log(`✅ 深度搜索找到URL: ${foundUrl}`);\n            return foundUrl;\n        }\n    }\n    \n    console.log('❌ 未找到有效的URL');\n    return null;\n}\n\n// URL平台识别函数\nfunction identifyUrlPlatform(url) {\n    if (!url || typeof url !== 'string') {\n        return { \n            platform: 'invalid', \n            confidence: 0, \n            reason: '无效输入',\n            suggestion: '请检查输入数据是否包含有效的URL'\n        };\n    }\n    \n    console.log(`🔍 分析URL: ${url}`);\n    \n    // 抖音平台识别规则\n    const douyinPatterns = [\n        /v\\.douyin\\.com/i,\n        /www\\.douyin\\.com/i,\n        /douyin\\.com/i,\n        /\\/D[0-9A-Za-z]{8,}\\/?/i\n    ];\n    \n    // 小红书平台识别规则\n    const xiaohongshuPatterns = [\n        /www\\.xiaohongshu\\.com/i,\n        /xhslink\\.com/i,\n        /xiaohongshu\\.com/i,\n        /red/i,\n        /\\/discovery\\/item\\/[0-9a-f]+/i\n    ];\n    \n    // 快手平台识别规则\n    const kuaishouPatterns = [\n        /www\\.kuaishou\\.com/i,\n        /kuaishou\\.com/i,\n        /gifshow\\.com/i,\n        /\\/short-video\\//i,\n        /\\/photo\\//i\n    ];\n    \n    // 其他平台识别规则\n    const otherPlatforms = {\n        'bilibili': [/bilibili\\.com/i, /b23\\.tv/i],\n        'youtube': [/youtube\\.com/i, /youtu\\.be/i],\n        'weibo': [/weibo\\.com/i, /weibo\\.cn/i],\n        'zhihu': [/zhihu\\.com/i],\n        'tiktok': [/tiktok\\.com/i]\n    };\n    \n    // 检查抖音\n    for (const pattern of douyinPatterns) {\n        if (pattern.test(url)) {\n            return { \n                platform: 'douyin', \n                confidence: 0.9, \n                reason: '匹配抖音URL模式',\n                suggestion: '这是一个抖音视频链接，可以用于抖音相关处理'\n            };\n        }\n    }\n    \n    // 检查小红书\n    for (const pattern of xiaohongshuPatterns) {\n        if (pattern.test(url)) {\n            return { \n                platform: 'xiaohongshu', \n                confidence: 0.9, \n                reason: '匹配小红书URL模式',\n                suggestion: '这是一个小红书内容链接，可以用于小红书相关处理'\n            };\n        }\n    }\n    \n    // 检查快手\n    for (const pattern of kuaishouPatterns) {\n        if (pattern.test(url)) {\n            return { \n                platform: 'kuaishou', \n                confidence: 0.9, \n                reason: '匹配快手URL模式',\n                suggestion: '这是一个快手视频链接，可以用于快手相关处理'\n            };\n        }\n    }\n    \n    // 检查其他平台\n    for (const [platform, patterns] of Object.entries(otherPlatforms)) {\n        for (const pattern of patterns) {\n            if (pattern.test(url)) {\n                return { \n                    platform: platform, \n                    confidence: 0.8, \n                    reason: `匹配${platform} URL模式`,\n                    suggestion: `这是一个${platform}链接，可以用于${platform}相关处理`\n                };\n            }\n        }\n    }\n    \n    // 通用URL分析\n    try {\n        const urlObj = new URL(url);\n        const domain = urlObj.hostname;\n        \n        if (domain.includes('douyin')) {\n            return { \n                platform: 'douyin', \n                confidence: 0.7, \n                reason: '域名包含douyin',\n                suggestion: '这可能是抖音相关链接，建议进一步验证'\n            };\n        }\n        \n        if (domain.includes('xiaohongshu') || domain.includes('red')) {\n            return { \n                platform: 'xiaohongshu', \n                confidence: 0.7, \n                reason: '域名包含小红书相关关键词',\n                suggestion: '这可能是小红书相关链接，建议进一步验证'\n            };\n        }\n        \n        if (domain.includes('kuaishou') || domain.includes('gifshow')) {\n            return { \n                platform: 'kuaishou', \n                confidence: 0.7, \n                reason: '域名包含快手相关关键词',\n                suggestion: '这可能是快手相关链接，建议进一步验证'\n            };\n        }\n        \n        return { \n            platform: 'unknown', \n            confidence: 0.3, \n            reason: `无法识别的域名: ${domain}`,\n            suggestion: '这是一个未知平台的链接，可能需要自定义处理'\n        };\n        \n    } catch (error) {\n        return { \n            platform: 'invalid', \n            confidence: 0, \n            reason: '无效的URL格式',\n            suggestion: '请检查URL格式是否正确'\n        };\n    }\n}\n\n// 获取平台处理建议\nfunction getPlatformSuggestion(platform) {\n    const suggestions = {\n        'douyin': {\n            action: '抖音视频处理',\n            steps: ['解析视频ID', '获取视频信息', '下载视频内容'],\n            tools: ['抖音API', '视频下载器']\n        },\n        'xiaohongshu': {\n            action: '小红书内容处理',\n            steps: ['解析笔记ID', '获取笔记详情', '提取图片/文字'],\n            tools: ['小红书API', '内容解析器']\n        },\n        'kuaishou': {\n            action: '快手视频处理',\n            steps: ['解析视频ID', '获取视频信息', '下载视频内容'],\n            tools: ['快手API', '视频下载器']\n        },\n        'bilibili': {\n            action: 'B站视频处理',\n            steps: ['解析BV号', '获取视频信息', '下载视频'],\n            tools: ['B站API', '视频下载器']\n        },\n        'youtube': {\n            action: 'YouTube视频处理',\n            steps: ['解析视频ID', '获取视频信息', '下载视频'],\n            tools: ['YouTube API', '视频下载器']\n        },\n        'unknown': {\n            action: '通用链接处理',\n            steps: ['分析链接结构', '提取关键信息', '自定义处理'],\n            tools: ['通用爬虫', '自定义解析器']\n        }\n    };\n    \n    return suggestions[platform] || {\n        action: '未知平台处理',\n        steps: ['分析链接特征', '确定处理策略'],\n        tools: ['通用工具']\n    };\n}\n\n// 主处理逻辑\nfunction main() {\n    console.log('📥 接收到的数据:', JSON.stringify(response, null, 2));\n    \n    // 提取URL\n    const url = extractUrlFromData(response);\n    \n    if (!url) {\n        return {\n            success: false,\n            message: '未找到有效的URL',\n            original_data: response,\n            platform: 'none',  // 无URL时的平台标识\n            platform_info: {\n                platform: 'none',\n                confidence: 0,\n                reason: '未找到URL',\n                suggestion: '请确保输入数据包含有效的URL链接'\n            }\n        };\n    }\n    \n    // 识别平台\n    const platformResult = identifyUrlPlatform(url);\n    \n    // 获取处理建议\n    const suggestion = getPlatformSuggestion(platformResult.platform);\n    \n    console.log(`🎯 识别结果: ${platformResult.platform} (置信度: ${platformResult.confidence})`);\n    console.log(`📝 原因: ${platformResult.reason}`);\n    console.log(`💡 建议: ${platformResult.suggestion}`);\n    \n    return {\n        success: true,\n        message: 'URL平台识别成功',\n        original_data: response,\n        url: url,\n        platform: platformResult.platform,  // 直接平台标识：douyin, xiaohongshu, kuaishou, bilibili等\n        platform_info: platformResult,\n        processing_suggestion: suggestion\n    };\n}\n\n// 执行主函数并返回结果给n8n工作流\nconst result = main();\nconsole.log('✅ URL平台识别完成');\n\nreturn result;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1472,
+        208
+      ],
+      "id": "9fb3b040-9c08-4b1f-a53b-ab13713bef37",
+      "name": "获取平台信息"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.platform }}",
+                    "rightValue": "douyin",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "cfda8ab8-ee00-4101-b395-561d0c6cf25f"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "douyin"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "2fdbc1f3-d2b7-4fa1-ad5d-a7c4755d1ca7",
+                    "leftValue": "={{ $json.platform }}",
+                    "rightValue": "xiaohongshu",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "xiaohongshu"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "1f949a8b-ffea-4ec6-9cae-8bb0ffd77cd7",
+                    "leftValue": "={{ $json.platform }}",
+                    "rightValue": "kuaishou",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "kuaishou"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "6602bd66-0403-4bb9-ba59-79341e2736cd",
+                    "leftValue": "={{ $json.platform }}",
+                    "rightValue": "bilibili",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "bilibili"
+            }
+          ]
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        -1024,
+        176
+      ],
+      "id": "f107a45b-dbd0-4367-ba6c-7ee98c958ad0",
+      "name": "根据信息选择对应工作流"
+    },
+    {
+      "parameters": {
+        "url": "https://api.bugpk.com/api/douyin",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "=url",
+              "value": "={{ $json.original_data.all_urls[0] }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "allowUnauthorizedCerts": true
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -800,
+        112
+      ],
+      "id": "8a3eaf45-acb1-4a1e-8389-52b9cdc47e42",
+      "name": "抖音视频解析获取地址"
+    },
+    {
+      "parameters": {
+        "url": "https://api.bugpk.com/api/xhsjx",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "=url",
+              "value": "={{ $json.original_data.all_urls[0] }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "allowUnauthorizedCerts": true
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -800,
+        304
+      ],
+      "id": "ad7d9cad-0a95-4f40-988c-a2667fbab684",
+      "name": "小红书解析获取地址"
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Function节点 - 检查JSON数据中的imgurl参数\n// 如果有imgurl参数，返回imgurl和内容；如果没有，返回url和内容\n\n// n8n工作流数据接收\nconst response = $json;\n\nconsole.log('🔍 开始检查JSON数据中的图片参数...');\n\n// 主处理函数\nfunction checkImgUrlParameter(data) {\n    console.log('📥 输入数据:', JSON.stringify(data, null, 2));\n    \n    // 检查数据格式\n    if (!data || typeof data !== 'object') {\n        return {\n            success: false,\n            message: '输入数据格式错误',\n            result: null,\n            parameter_type: 'invalid',\n            parameter_value: null\n        };\n    }\n    \n    // 检查是否有data字段\n    if (!data.data || typeof data.data !== 'object') {\n        return {\n            success: false,\n            message: '缺少data字段或data字段格式错误',\n            result: null,\n            parameter_type: 'invalid',\n            parameter_value: null\n        };\n    }\n    \n    const dataObj = data.data;\n    \n    // 检查是否有imgurl参数\n    if (dataObj.hasOwnProperty('imgurl')) {\n        console.log('✅ 找到imgurl参数');\n        \n        // 处理imgurl内容\n        let imgurlContent = dataObj.imgurl;\n        \n        // 如果imgurl是数组，处理数组内容\n        if (Array.isArray(imgurlContent)) {\n            console.log(`📷 imgurl是数组，包含 ${imgurlContent.length} 个元素`);\n            \n            // 清理和格式化数组内容\n            const cleanedImgUrls = imgurlContent.map(url => {\n                // 去除URL两端的空格和反引号\n                return url.trim().replace(/^`|`$/g, '').trim();\n            });\n            \n            return {\n                success: true,\n                message: '找到imgurl参数（数组格式）',\n                parameter_type: 'imgurl',\n                parameter_value: cleanedImgUrls,\n                count: cleanedImgUrls.length,\n                result: {\n                    imgurl: cleanedImgUrls\n                }\n            };\n        } \n        // 如果imgurl是字符串\n        else if (typeof imgurlContent === 'string') {\n            console.log('📷 imgurl是字符串');\n            \n            // 清理和格式化字符串内容\n            const cleanedImgUrl = imgurlContent.trim().replace(/^`|`$/g, '').trim();\n            \n            return {\n                success: true,\n                message: '找到imgurl参数（字符串格式）',\n                parameter_type: 'imgurl',\n                parameter_value: cleanedImgUrl,\n                count: 1,\n                result: {\n                    imgurl: cleanedImgUrl\n                }\n            };\n        }\n        // 其他格式的imgurl\n        else {\n            return {\n                success: true,\n                message: '找到imgurl参数（其他格式）',\n                parameter_type: 'imgurl',\n                parameter_value: imgurlContent,\n                count: 1,\n                result: {\n                    imgurl: imgurlContent\n                }\n            };\n        }\n    }\n    // 检查是否有url参数\n    else if (dataObj.hasOwnProperty('url')) {\n        console.log('✅ 未找到imgurl参数，但找到url参数');\n        \n        let urlContent = dataObj.url;\n        \n        // 处理url内容\n        if (typeof urlContent === 'string') {\n            const cleanedUrl = urlContent.trim().replace(/^`|`$/g, '').trim();\n            \n            return {\n                success: true,\n                message: '未找到imgurl参数，但找到url参数',\n                parameter_type: 'url',\n                parameter_value: cleanedUrl,\n                count: 1,\n                result: {\n                    url: cleanedUrl\n                }\n            };\n        } else {\n            return {\n                success: true,\n                message: '未找到imgurl参数，但找到url参数',\n                parameter_type: 'url',\n                parameter_value: urlContent,\n                count: 1,\n                result: {\n                    url: urlContent\n                }\n            };\n        }\n    }\n    // 检查其他可能的图片URL字段\n    else {\n        console.log('🔍 未找到imgurl和url参数，搜索其他图片相关字段...');\n        \n        // 搜索其他可能的图片URL字段\n        const imageFields = ['image', 'cover', 'avatar', 'picture', 'pic', 'thumbnail'];\n        let foundField = null;\n        let foundValue = null;\n        \n        for (const field of imageFields) {\n            if (dataObj.hasOwnProperty(field)) {\n                foundField = field;\n                foundValue = dataObj[field];\n                break;\n            }\n        }\n        \n        if (foundField) {\n            console.log(`✅ 找到替代字段: ${foundField}`);\n            \n            // 处理找到的字段内容\n            if (typeof foundValue === 'string') {\n                const cleanedValue = foundValue.trim().replace(/^`|`$/g, '').trim();\n                \n                return {\n                    success: true,\n                    message: `未找到imgurl参数，但找到${foundField}参数`,\n                    parameter_type: foundField,\n                    parameter_value: cleanedValue,\n                    count: 1,\n                    result: {\n                        [foundField]: cleanedValue\n                    }\n                };\n            } else {\n                return {\n                    success: true,\n                    message: `未找到imgurl参数，但找到${foundField}参数`,\n                    parameter_type: foundField,\n                    parameter_value: foundValue,\n                    count: 1,\n                    result: {\n                        [foundField]: foundValue\n                    }\n                };\n            }\n        } else {\n            console.log('❌ 未找到任何图片相关参数');\n            \n            return {\n                success: false,\n                message: '未找到imgurl、url或其他图片相关参数',\n                parameter_type: 'none',\n                parameter_value: null,\n                count: 0,\n                result: null\n            };\n        }\n    }\n}\n\n// 执行主函数\nconsole.log('🎯 开始处理n8n工作流数据...');\nconst result = checkImgUrlParameter(response);\n\nconsole.log('📊 处理结果:');\nconsole.log(`  - 成功: ${result.success}`);\nconsole.log(`  - 消息: ${result.message}`);\nconsole.log(`  - 参数类型: ${result.parameter_type}`);\nconsole.log(`  - 数量: ${result.count}`);\n\nif (result.success && result.result) {\n    console.log(`  - 返回内容: ${JSON.stringify(result.result, null, 2)}`);\n}\n\nconsole.log('✅ JSON数据检查完成');\n\n// 返回结果给n8n工作流\nreturn result;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -576,
+        304
+      ],
+      "id": "d1999dd8-0b74-4879-9b2d-579611b8f6f6",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.parameter_type }}",
+                    "rightValue": "imgurl",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "b044f1ca-d03c-4a69-99f2-a7eb70763c4f"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "imgurl"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "ccb7c462-386a-4010-8208-c6befda57001",
+                    "leftValue": "={{ $json.parameter_type }}",
+                    "rightValue": "url",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "url"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        -352,
+        304
+      ],
+      "id": "6dc7a042-849e-4b24-9ab9-bf154a6f8bb9",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "20abeee6-b5a5-46f9-b885-ed62786f134c",
+              "name": "url",
+              "value": "={{ $json.result.url }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        48,
+        432
+      ],
+      "id": "6fb9d3bc-75d0-49c6-b439-490fc354a724",
+      "name": "小红书视频解析"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f70cb110-186a-487c-bf6d-1f1017f9b1c5",
+              "name": "images",
+              "value": "={{ $json.result.imgurl }}",
+              "type": "array"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        0,
+        144
+      ],
+      "id": "7c1a04bd-4b78-4176-a6fa-590785fb293e",
+      "name": "小红书图片解析"
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Function节点 - 检查JSON数据中的images参数\n// 如果有images参数，返回images和内容；如果没有，返回url和内容\n\n// n8n工作流数据接收\nconst response = $json;\n\nconsole.log('🔍 开始检查JSON数据中的图片参数...');\n\n// 主处理函数\nfunction checkImagesParameter(data) {\n    console.log('📥 输入数据:', JSON.stringify(data, null, 2));\n    \n    // 检查数据格式\n    if (!data || typeof data !== 'object') {\n        return {\n            success: false,\n            message: '输入数据格式错误',\n            result: null,\n            parameter_type: 'invalid',\n            parameter_value: null,\n            count: 0\n        };\n    }\n    \n    // 检查是否有data字段\n    if (!data.data || typeof data.data !== 'object') {\n        return {\n            success: false,\n            message: '缺少data字段或data字段格式错误',\n            result: null,\n            parameter_type: 'invalid',\n            parameter_value: null,\n            count: 0\n        };\n    }\n    \n    const dataObj = data.data;\n    \n    // 检查是否有images参数且不为空\n    if (dataObj.hasOwnProperty('images') && dataObj.images != null) {\n        console.log('✅ 找到images参数');\n        \n        // 处理images内容\n        let imagesContent = dataObj.images;\n        \n        // 检查images是否为空\n        let isEmpty = false;\n        \n        // 如果images是数组，检查是否为空数组\n        if (Array.isArray(imagesContent)) {\n            if (imagesContent.length === 0) {\n                console.log('⚠️ images是空数组，视为不存在');\n                isEmpty = true;\n            } else {\n                console.log(`📷 images是数组，包含 ${imagesContent.length} 个元素`);\n                \n                // 清理和格式化数组内容\n                const cleanedImages = imagesContent.map(url => {\n                    // 去除URL两端的空格和反引号\n                    return url.trim().replace(/^`|`$/g, '').trim();\n                });\n                \n                return {\n                    success: true,\n                    message: '找到images参数（数组格式）',\n                    parameter_type: 'images',\n                    parameter_value: cleanedImages,\n                    count: cleanedImages.length,\n                    result: {\n                        images: cleanedImages\n                    }\n                };\n            }\n        } \n        // 如果images是字符串，检查是否为空字符串\n        else if (typeof imagesContent === 'string') {\n            if (imagesContent.trim() === '') {\n                console.log('⚠️ images是空字符串，视为不存在');\n                isEmpty = true;\n            } else {\n                console.log('📷 images是字符串');\n                \n                // 清理和格式化字符串内容\n                const cleanedImage = imagesContent.trim().replace(/^`|`$/g, '').trim();\n                \n                return {\n                    success: true,\n                    message: '找到images参数（字符串格式）',\n                    parameter_type: 'images',\n                    parameter_value: cleanedImage,\n                    count: 1,\n                    result: {\n                        images: cleanedImage\n                    }\n                };\n            }\n        }\n        // 其他格式的images，检查是否为null或undefined\n        else if (imagesContent === null || imagesContent === undefined) {\n            console.log('⚠️ images是null或undefined，视为不存在');\n            isEmpty = true;\n        }\n        // 其他格式的images\n        else {\n            return {\n                success: true,\n                message: '找到images参数（其他格式）',\n                parameter_type: 'images',\n                parameter_value: imagesContent,\n                count: 1,\n                result: {\n                    images: imagesContent\n                }\n            };\n        }\n        \n        // 如果images为空，继续检查其他参数\n        if (isEmpty) {\n            console.log('🔍 images参数为空，继续检查其他参数...');\n        } else {\n            // 如果images不为空，直接返回结果\n            return {\n                success: true,\n                message: '找到images参数',\n                parameter_type: 'images',\n                parameter_value: imagesContent,\n                count: 1,\n                result: {\n                    images: imagesContent\n                }\n            };\n        }\n    }\n    \n    // 检查是否有url参数且不为空\n    if (dataObj.hasOwnProperty('url') && dataObj.url != null) {\n        console.log('✅ 未找到images参数，但找到url参数');\n        \n        let urlContent = dataObj.url;\n        \n        // 处理url内容\n        if (typeof urlContent === 'string') {\n            const cleanedUrl = urlContent.trim().replace(/^`|`$/g, '').trim();\n            \n            return {\n                success: true,\n                message: '未找到images参数，但找到url参数',\n                parameter_type: 'url',\n                parameter_value: cleanedUrl,\n                count: 1,\n                result: {\n                    url: cleanedUrl\n                }\n            };\n        } else {\n            return {\n                success: true,\n                message: '未找到images参数，但找到url参数',\n                parameter_type: 'url',\n                parameter_value: urlContent,\n                count: 1,\n                result: {\n                    url: urlContent\n                }\n            };\n        }\n    }\n    // 检查其他可能的图片URL字段\n    else {\n        console.log('🔍 未找到images和url参数，搜索其他图片相关字段...');\n        \n        // 搜索其他可能的图片URL字段\n        const imageFields = ['image', 'cover', 'avatar', 'picture', 'pic', 'thumbnail', 'imgurl'];\n        let foundField = null;\n        let foundValue = null;\n        \n        for (const field of imageFields) {\n            if (dataObj.hasOwnProperty(field)) {\n                foundField = field;\n                foundValue = dataObj[field];\n                break;\n            }\n        }\n        \n        if (foundField) {\n            console.log(`✅ 找到替代字段: ${foundField}`);\n            \n            // 处理找到的字段内容\n            if (typeof foundValue === 'string') {\n                const cleanedValue = foundValue.trim().replace(/^`|`$/g, '').trim();\n                \n                return {\n                    success: true,\n                    message: `未找到images参数，但找到${foundField}参数`,\n                    parameter_type: foundField,\n                    parameter_value: cleanedValue,\n                    count: 1,\n                    result: {\n                        [foundField]: cleanedValue\n                    }\n                };\n            } else {\n                return {\n                    success: true,\n                    message: `未找到images参数，但找到${foundField}参数`,\n                    parameter_type: foundField,\n                    parameter_value: foundValue,\n                    count: 1,\n                    result: {\n                        [foundField]: foundValue\n                    }\n                };\n            }\n        } else {\n            console.log('❌ 未找到任何图片相关参数');\n            \n            return {\n                success: false,\n                message: '未找到images、url或其他图片相关参数',\n                parameter_type: 'none',\n                parameter_value: null,\n                count: 0,\n                result: null\n            };\n        }\n    }\n}\n\n// 执行主函数\nconsole.log('🎯 开始处理n8n工作流数据...');\nconst result = checkImagesParameter(response);\n\nconsole.log('📊 处理结果:');\nconsole.log(`  - 成功: ${result.success}`);\nconsole.log(`  - 消息: ${result.message}`);\nconsole.log(`  - 参数类型: ${result.parameter_type}`);\nconsole.log(`  - 数量: ${result.count}`);\n\nif (result.success && result.result) {\n    console.log(`  - 返回内容: ${JSON.stringify(result.result, null, 2)}`);\n}\n\nconsole.log('✅ JSON数据检查完成');\n\n// 返回结果给n8n工作流\nreturn result;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -592,
+        112
+      ],
+      "id": "8583360d-7c56-4734-8dd5-f61a658cfb24",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.parameter_type }}",
+                    "rightValue": "images",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "34bc6e42-7808-4669-862f-fee0b11f0c87"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "images"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "065c7439-48cf-409f-bf40-c9c985bd9e94",
+                    "leftValue": "={{ $json.parameter_type }}",
+                    "rightValue": "url",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "url"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        -384,
+        112
+      ],
+      "id": "aae02ae5-9b6d-41a2-ae0a-9ddface7094b",
+      "name": "Switch1"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b3ef2a19-e2cd-4d48-96e0-f34fdcc51df0",
+              "name": "images",
+              "value": "={{ $json.result.images }}",
+              "type": "array"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        0,
+        0
+      ],
+      "id": "fb130098-be10-4044-9000-41e7d62f1cdc",
+      "name": "抖音图片解析"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "4d042191-8af8-4937-ae4c-301bb07a5028",
+              "name": "url",
+              "value": "={{ $json.result.url }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        48,
+        288
+      ],
+      "id": "d5ad7c76-9b2b-4daa-b701-6911759b40c6",
+      "name": "抖音视频解析"
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {
+          "includeBinaries": true
+        }
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        304,
+        64
+      ],
+      "id": "98880f8f-be19-4f00-ab3e-afe1854412ef",
+      "name": "Aggregate"
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        304,
+        352
+      ],
+      "id": "592005f9-2188-45d2-9c0d-18ae6f79ecc8",
+      "name": "Aggregate1"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "parserAll",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1952,
+        208
+      ],
+      "id": "f9f2bacf-51cb-4b0f-a7b7-6929d54fe702",
+      "name": "Webhook",
+      "webhookId": "2913aca4-3fb9-4ad9-a5ee-09f50d10aea1"
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        608,
+        64
+      ],
+      "id": "ee2e4361-9a94-4801-bd41-ae25e6ab01be",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        608,
+        352
+      ],
+      "id": "8aac7940-1008-420b-983d-889562f85e55",
+      "name": "Respond to Webhook1"
+    }
+  ],
+  "connections": {
+    "提取URL地址": {
+      "main": [
+        [
+          {
+            "node": "获取平台信息",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "获取平台信息": {
+      "main": [
+        [
+          {
+            "node": "清理数据，保留平台信息与URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "清理数据，保留平台信息与URL": {
+      "main": [
+        [
+          {
+            "node": "根据信息选择对应工作流",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "根据信息选择对应工作流": {
+      "main": [
+        [
+          {
+            "node": "抖音视频解析获取地址",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "小红书解析获取地址",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "抖音视频解析获取地址": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "小红书解析获取地址": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "小红书图片解析",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "小红书视频解析",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Switch1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch1": {
+      "main": [
+        [
+          {
+            "node": "抖音图片解析",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "抖音视频解析",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "抖音视频解析": {
+      "main": [
+        [
+          {
+            "node": "Aggregate1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "小红书视频解析": {
+      "main": [
+        [
+          {
+            "node": "Aggregate1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "抖音图片解析": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "小红书图片解析": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "提取URL地址",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate1": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {},
+  "versionId": "65676e64-145e-4f0c-80c9-e4d128aa3b49",
+  "activeVersionId": "65676e64-145e-4f0c-80c9-e4d128aa3b49",
+  "versionCounter": 3,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2025-12-16T12:36:59.120Z",
+      "createdAt": "2025-12-16T12:36:59.120Z",
+      "role": "workflow:owner",
+      "workflowId": "7QXGhmxnsH4ncMJS",
+      "projectId": "2hoECj5RzPkbXIK6",
+      "project": {
+        "updatedAt": "2025-12-16T12:31:47.827Z",
+        "createdAt": "2025-12-16T12:30:18.158Z",
+        "id": "2hoECj5RzPkbXIK6",
+        "name": "冷 布丁 <498128186@qq.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "projectRelations": [
+          {
+            "updatedAt": "2025-12-16T12:30:18.159Z",
+            "createdAt": "2025-12-16T12:30:18.159Z",
+            "userId": "c46ce840-de81-412d-a160-69fb3885a0dd",
+            "projectId": "2hoECj5RzPkbXIK6",
+            "user": {
+              "updatedAt": "2025-12-17T05:04:54.000Z",
+              "createdAt": "2025-12-16T12:30:17.247Z",
+              "id": "c46ce840-de81-412d-a160-69fb3885a0dd",
+              "email": "498128186@qq.com",
+              "firstName": "冷",
+              "lastName": "布丁",
+              "personalizationAnswers": {
+                "version": "v4",
+                "personalization_survey_submitted_at": "2025-12-16T12:31:51.645Z",
+                "personalization_survey_n8n_version": "2.0.2"
+              },
+              "settings": {
+                "userActivated": false,
+                "easyAIWorkflowOnboarded": true
+              },
+              "disabled": false,
+              "mfaEnabled": false,
+              "lastActiveAt": "2025-12-17",
+              "isPending": false
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2025-12-16T12:40:44.000Z",
+    "createdAt": "2025-12-16T12:36:59.124Z",
+    "versionId": "65676e64-145e-4f0c-80c9-e4d128aa3b49",
+    "workflowId": "7QXGhmxnsH4ncMJS",
+    "nodes": [
+      {
+        "parameters": {
+          "jsCode": "// n8n Chat节点URL提取器\n// 专门处理从n8n Chat节点传递过来的消息\n\n// 第一句代码：接收n8n Chat节点传递的数据\nconst chatMessage = $json.body;\n\nconsole.log('=== n8n Chat节点URL提取开始 ===');\nconsole.log('接收到的消息类型:', typeof chatMessage);\nconsole.log('原始消息内容:', JSON.stringify(chatMessage, null, 2));\n\n/**\n * 从Chat消息中提取文本内容\n * @param {Object} message - Chat节点传递的消息对象\n * @returns {string} 提取到的文本内容\n */\nfunction extractTextFromChatMessage(message) {\n    if (!message) {\n        return '';\n    }\n    \n    // Chat节点可能传递的不同格式\n    if (typeof message === 'string') {\n        return message;\n    }\n    \n    if (typeof message === 'object') {\n        // 常见Chat消息格式\n        if (message.text) {\n            return message.text;\n        }\n        if (message.message) {\n            return message.message;\n        }\n        if (message.content) {\n            return message.content;\n        }\n        if (message.body) {\n            return message.body;\n        }\n        \n        // 如果是数组，尝试提取第一个元素的文本\n        if (Array.isArray(message) && message.length > 0) {\n            return extractTextFromChatMessage(message[0]);\n        }\n        \n        // 如果是复杂对象，转换为JSON字符串\n        return JSON.stringify(message);\n    }\n    \n    return String(message);\n}\n\n/**\n * 从文本中提取URL链接\n * @param {string} text - 要处理的文本\n * @returns {string|null} 提取到的URL链接\n */\nfunction extractUrlFromText(text) {\n    if (!text || typeof text !== 'string') {\n        console.log('❌ 文本内容为空或不是字符串');\n        return null;\n    }\n    \n    console.log('📝 处理文本内容:', text.substring(0, 100) + (text.length > 100 ? '...' : ''));\n    \n    // 改进的URL正则表达式，支持更多格式，避免包含中文标点\n    const urlRegex = /https?:\\/\\/[^\\s\\\"<>{}|\\\\^`\\[\\]\\u4e00-\\u9fff，。！？；：\"“”‘’]+/gi;\n    const matches = text.match(urlRegex);\n    \n    if (matches && matches.length > 0) {\n        const foundUrl = matches[0];\n        console.log('✅ 找到URL:', foundUrl);\n        return foundUrl;\n    } else {\n        console.log('❌ 未找到URL链接');\n        return null;\n    }\n}\n\n/**\n * 提取所有URL链接\n * @param {string} text - 要处理的文本\n * @returns {string[]} 所有找到的URL链接\n */\nfunction extractAllUrlsFromText(text) {\n    if (!text || typeof text !== 'string') {\n        return [];\n    }\n    \n    const urlRegex = /https?:\\/\\/[^\\s\\\"<>{}|\\\\^`\\[\\]]+/gi;\n    const matches = text.match(urlRegex) || [];\n    \n    console.log(`🔍 找到 ${matches.length} 个URL链接`);\n    return matches;\n}\n\n// 主处理逻辑\nlet extractedText = '';\nlet voido_url = null;\nlet all_urls = [];\n\n// 1. 从Chat消息中提取文本\nconsole.log('\\n--- 步骤1: 提取文本内容 ---');\nextractedText = extractTextFromChatMessage(chatMessage);\nconsole.log('✅ 提取到的文本:', extractedText.substring(0, 150) + (extractedText.length > 150 ? '...' : ''));\n\n// 2. 从文本中提取URL\nconsole.log('\\n--- 步骤2: 提取URL链接 ---');\nif (extractedText) {\n    voido_url = extractUrlFromText(extractedText);\n    all_urls = extractAllUrlsFromText(extractedText);\n}\n\n// 3. 输出结果\nconsole.log('\\n--- 最终结果 ---');\nif (voido_url) {\n    console.log('🎉 成功提取到voido_url:', voido_url);\n    \n    // URL分析\n    console.log('📊 URL分析:');\n    console.log('  - 协议:', voido_url.startsWith('https') ? 'HTTPS' : 'HTTP');\n    console.log('  - 域名:', voido_url.split('/')[2]);\n    console.log('  - 路径:', voido_url.split('/').slice(3).join('/'));\n    \n    if (all_urls.length > 1) {\n        console.log('  - 其他URL:', all_urls.slice(1));\n    }\n} else {\n    console.log('💔 未能提取到URL链接');\n}\n\nconsole.log('\\n=== n8n Chat节点URL提取结束 ===');\n\n// 返回结果给n8n工作流\nreturn {\n    voido_url: voido_url,\n    all_urls: all_urls,\n    extracted_text: extractedText,\n    success: !!voido_url,\n    message: voido_url ? `成功提取${all_urls.length}个URL` : '未找到URL',\n    url_count: all_urls.length,\n    original_message: chatMessage\n};"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -1696,
+          208
+        ],
+        "id": "8ff83c7c-8cbb-4557-93e8-5542a0967a70",
+        "name": "提取URL地址"
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "29289767-439a-4e55-9c32-79c9c268335a",
+                "name": "platform",
+                "value": "={{ $json.platform }}",
+                "type": "string"
+              },
+              {
+                "id": "c444a53b-7950-4e91-a224-1a324e209c98",
+                "name": "original_data.all_urls",
+                "value": "={{ $json.original_data.all_urls }}",
+                "type": "array"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          -1248,
+          208
+        ],
+        "id": "1cdf135b-33ba-47bf-bfc6-13448d3c9c7b",
+        "name": "清理数据，保留平台信息与URL"
+      },
+      {
+        "parameters": {
+          "jsCode": "// n8n Function节点 - URL平台识别器\n// 用于识别URL属于抖音、小红书、快手等平台\n\n// n8n工作流数据接收\nconst response = $json;\n\nconsole.log('🔍 开始URL平台识别...');\n\n// 提取URL函数\nfunction extractUrlFromData(data) {\n    if (!data) {\n        console.log('❌ 输入数据为空');\n        return null;\n    }\n    \n    // 如果数据是字符串，尝试直接提取URL\n    if (typeof data === 'string') {\n        const urlRegex = /https?:\\/\\/[^\\s\"<>{}|\\\\^`\\[\\]\\u4e00-\\u9fff，。！？；：\"“”‘’]+/gi;\n        const matches = data.match(urlRegex);\n        if (matches && matches.length > 0) {\n            console.log(`✅ 从字符串中提取到URL: ${matches[0]}`);\n            return matches[0];\n        }\n    }\n    \n    // 如果数据是对象，深度搜索URL字段\n    if (typeof data === 'object' && data !== null) {\n        // 优先搜索常见URL字段\n        const urlFields = ['url', 'link', 'href', 'video_url', 'douyin_url', 'xiaohongshu_url', 'kuaishou_url'];\n        \n        for (const field of urlFields) {\n            if (data[field] && typeof data[field] === 'string') {\n                const urlRegex = /https?:\\/\\/[^\\s\"<>{}|\\\\^`\\[\\]\\u4e00-\\u9fff，。！？；：\"“”‘’]+/gi;\n                const matches = data[field].match(urlRegex);\n                if (matches && matches.length > 0) {\n                    console.log(`✅ 从字段\"${field}\"中提取到URL: ${matches[0]}`);\n                    return matches[0];\n                }\n            }\n        }\n        \n        // 深度搜索对象中的URL\n        function deepSearch(obj) {\n            if (typeof obj === 'string') {\n                const urlRegex = /https?:\\/\\/[^\\s\"<>{}|\\\\^`\\[\\]\\u4e00-\\u9fff，。！？；：\"“”‘’]+/gi;\n                const matches = obj.match(urlRegex);\n                if (matches && matches.length > 0) {\n                    return matches[0];\n                }\n            } else if (typeof obj === 'object' && obj !== null) {\n                for (const key in obj) {\n                    if (obj.hasOwnProperty(key)) {\n                        const result = deepSearch(obj[key]);\n                        if (result) return result;\n                    }\n                }\n            }\n            return null;\n        }\n        \n        const foundUrl = deepSearch(data);\n        if (foundUrl) {\n            console.log(`✅ 深度搜索找到URL: ${foundUrl}`);\n            return foundUrl;\n        }\n    }\n    \n    console.log('❌ 未找到有效的URL');\n    return null;\n}\n\n// URL平台识别函数\nfunction identifyUrlPlatform(url) {\n    if (!url || typeof url !== 'string') {\n        return { \n            platform: 'invalid', \n            confidence: 0, \n            reason: '无效输入',\n            suggestion: '请检查输入数据是否包含有效的URL'\n        };\n    }\n    \n    console.log(`🔍 分析URL: ${url}`);\n    \n    // 抖音平台识别规则\n    const douyinPatterns = [\n        /v\\.douyin\\.com/i,\n        /www\\.douyin\\.com/i,\n        /douyin\\.com/i,\n        /\\/D[0-9A-Za-z]{8,}\\/?/i\n    ];\n    \n    // 小红书平台识别规则\n    const xiaohongshuPatterns = [\n        /www\\.xiaohongshu\\.com/i,\n        /xhslink\\.com/i,\n        /xiaohongshu\\.com/i,\n        /red/i,\n        /\\/discovery\\/item\\/[0-9a-f]+/i\n    ];\n    \n    // 快手平台识别规则\n    const kuaishouPatterns = [\n        /www\\.kuaishou\\.com/i,\n        /kuaishou\\.com/i,\n        /gifshow\\.com/i,\n        /\\/short-video\\//i,\n        /\\/photo\\//i\n    ];\n    \n    // 其他平台识别规则\n    const otherPlatforms = {\n        'bilibili': [/bilibili\\.com/i, /b23\\.tv/i],\n        'youtube': [/youtube\\.com/i, /youtu\\.be/i],\n        'weibo': [/weibo\\.com/i, /weibo\\.cn/i],\n        'zhihu': [/zhihu\\.com/i],\n        'tiktok': [/tiktok\\.com/i]\n    };\n    \n    // 检查抖音\n    for (const pattern of douyinPatterns) {\n        if (pattern.test(url)) {\n            return { \n                platform: 'douyin', \n                confidence: 0.9, \n                reason: '匹配抖音URL模式',\n                suggestion: '这是一个抖音视频链接，可以用于抖音相关处理'\n            };\n        }\n    }\n    \n    // 检查小红书\n    for (const pattern of xiaohongshuPatterns) {\n        if (pattern.test(url)) {\n            return { \n                platform: 'xiaohongshu', \n                confidence: 0.9, \n                reason: '匹配小红书URL模式',\n                suggestion: '这是一个小红书内容链接，可以用于小红书相关处理'\n            };\n        }\n    }\n    \n    // 检查快手\n    for (const pattern of kuaishouPatterns) {\n        if (pattern.test(url)) {\n            return { \n                platform: 'kuaishou', \n                confidence: 0.9, \n                reason: '匹配快手URL模式',\n                suggestion: '这是一个快手视频链接，可以用于快手相关处理'\n            };\n        }\n    }\n    \n    // 检查其他平台\n    for (const [platform, patterns] of Object.entries(otherPlatforms)) {\n        for (const pattern of patterns) {\n            if (pattern.test(url)) {\n                return { \n                    platform: platform, \n                    confidence: 0.8, \n                    reason: `匹配${platform} URL模式`,\n                    suggestion: `这是一个${platform}链接，可以用于${platform}相关处理`\n                };\n            }\n        }\n    }\n    \n    // 通用URL分析\n    try {\n        const urlObj = new URL(url);\n        const domain = urlObj.hostname;\n        \n        if (domain.includes('douyin')) {\n            return { \n                platform: 'douyin', \n                confidence: 0.7, \n                reason: '域名包含douyin',\n                suggestion: '这可能是抖音相关链接，建议进一步验证'\n            };\n        }\n        \n        if (domain.includes('xiaohongshu') || domain.includes('red')) {\n            return { \n                platform: 'xiaohongshu', \n                confidence: 0.7, \n                reason: '域名包含小红书相关关键词',\n                suggestion: '这可能是小红书相关链接，建议进一步验证'\n            };\n        }\n        \n        if (domain.includes('kuaishou') || domain.includes('gifshow')) {\n            return { \n                platform: 'kuaishou', \n                confidence: 0.7, \n                reason: '域名包含快手相关关键词',\n                suggestion: '这可能是快手相关链接，建议进一步验证'\n            };\n        }\n        \n        return { \n            platform: 'unknown', \n            confidence: 0.3, \n            reason: `无法识别的域名: ${domain}`,\n            suggestion: '这是一个未知平台的链接，可能需要自定义处理'\n        };\n        \n    } catch (error) {\n        return { \n            platform: 'invalid', \n            confidence: 0, \n            reason: '无效的URL格式',\n            suggestion: '请检查URL格式是否正确'\n        };\n    }\n}\n\n// 获取平台处理建议\nfunction getPlatformSuggestion(platform) {\n    const suggestions = {\n        'douyin': {\n            action: '抖音视频处理',\n            steps: ['解析视频ID', '获取视频信息', '下载视频内容'],\n            tools: ['抖音API', '视频下载器']\n        },\n        'xiaohongshu': {\n            action: '小红书内容处理',\n            steps: ['解析笔记ID', '获取笔记详情', '提取图片/文字'],\n            tools: ['小红书API', '内容解析器']\n        },\n        'kuaishou': {\n            action: '快手视频处理',\n            steps: ['解析视频ID', '获取视频信息', '下载视频内容'],\n            tools: ['快手API', '视频下载器']\n        },\n        'bilibili': {\n            action: 'B站视频处理',\n            steps: ['解析BV号', '获取视频信息', '下载视频'],\n            tools: ['B站API', '视频下载器']\n        },\n        'youtube': {\n            action: 'YouTube视频处理',\n            steps: ['解析视频ID', '获取视频信息', '下载视频'],\n            tools: ['YouTube API', '视频下载器']\n        },\n        'unknown': {\n            action: '通用链接处理',\n            steps: ['分析链接结构', '提取关键信息', '自定义处理'],\n            tools: ['通用爬虫', '自定义解析器']\n        }\n    };\n    \n    return suggestions[platform] || {\n        action: '未知平台处理',\n        steps: ['分析链接特征', '确定处理策略'],\n        tools: ['通用工具']\n    };\n}\n\n// 主处理逻辑\nfunction main() {\n    console.log('📥 接收到的数据:', JSON.stringify(response, null, 2));\n    \n    // 提取URL\n    const url = extractUrlFromData(response);\n    \n    if (!url) {\n        return {\n            success: false,\n            message: '未找到有效的URL',\n            original_data: response,\n            platform: 'none',  // 无URL时的平台标识\n            platform_info: {\n                platform: 'none',\n                confidence: 0,\n                reason: '未找到URL',\n                suggestion: '请确保输入数据包含有效的URL链接'\n            }\n        };\n    }\n    \n    // 识别平台\n    const platformResult = identifyUrlPlatform(url);\n    \n    // 获取处理建议\n    const suggestion = getPlatformSuggestion(platformResult.platform);\n    \n    console.log(`🎯 识别结果: ${platformResult.platform} (置信度: ${platformResult.confidence})`);\n    console.log(`📝 原因: ${platformResult.reason}`);\n    console.log(`💡 建议: ${platformResult.suggestion}`);\n    \n    return {\n        success: true,\n        message: 'URL平台识别成功',\n        original_data: response,\n        url: url,\n        platform: platformResult.platform,  // 直接平台标识：douyin, xiaohongshu, kuaishou, bilibili等\n        platform_info: platformResult,\n        processing_suggestion: suggestion\n    };\n}\n\n// 执行主函数并返回结果给n8n工作流\nconst result = main();\nconsole.log('✅ URL平台识别完成');\n\nreturn result;"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -1472,
+          208
+        ],
+        "id": "9fb3b040-9c08-4b1f-a53b-ab13713bef37",
+        "name": "获取平台信息"
+      },
+      {
+        "parameters": {
+          "rules": {
+            "values": [
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "loose",
+                    "version": 2
+                  },
+                  "conditions": [
+                    {
+                      "leftValue": "={{ $json.platform }}",
+                      "rightValue": "douyin",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      },
+                      "id": "cfda8ab8-ee00-4101-b395-561d0c6cf25f"
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "douyin"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "loose",
+                    "version": 2
+                  },
+                  "conditions": [
+                    {
+                      "id": "2fdbc1f3-d2b7-4fa1-ad5d-a7c4755d1ca7",
+                      "leftValue": "={{ $json.platform }}",
+                      "rightValue": "xiaohongshu",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals",
+                        "name": "filter.operator.equals"
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "xiaohongshu"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "loose",
+                    "version": 2
+                  },
+                  "conditions": [
+                    {
+                      "id": "1f949a8b-ffea-4ec6-9cae-8bb0ffd77cd7",
+                      "leftValue": "={{ $json.platform }}",
+                      "rightValue": "kuaishou",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals",
+                        "name": "filter.operator.equals"
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "kuaishou"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "loose",
+                    "version": 2
+                  },
+                  "conditions": [
+                    {
+                      "id": "6602bd66-0403-4bb9-ba59-79341e2736cd",
+                      "leftValue": "={{ $json.platform }}",
+                      "rightValue": "bilibili",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals",
+                        "name": "filter.operator.equals"
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "bilibili"
+              }
+            ]
+          },
+          "looseTypeValidation": true,
+          "options": {}
+        },
+        "type": "n8n-nodes-base.switch",
+        "typeVersion": 3.3,
+        "position": [
+          -1024,
+          176
+        ],
+        "id": "f107a45b-dbd0-4367-ba6c-7ee98c958ad0",
+        "name": "根据信息选择对应工作流"
+      },
+      {
+        "parameters": {
+          "url": "https://api.bugpk.com/api/douyin",
+          "sendQuery": true,
+          "queryParameters": {
+            "parameters": [
+              {
+                "name": "=url",
+                "value": "={{ $json.original_data.all_urls[0] }}"
+              }
+            ]
+          },
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Accept",
+                "value": "application/json"
+              }
+            ]
+          },
+          "options": {
+            "allowUnauthorizedCerts": true
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          -800,
+          112
+        ],
+        "id": "8a3eaf45-acb1-4a1e-8389-52b9cdc47e42",
+        "name": "抖音视频解析获取地址"
+      },
+      {
+        "parameters": {
+          "url": "https://api.bugpk.com/api/xhsjx",
+          "sendQuery": true,
+          "queryParameters": {
+            "parameters": [
+              {
+                "name": "=url",
+                "value": "={{ $json.original_data.all_urls[0] }}"
+              }
+            ]
+          },
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Accept",
+                "value": "application/json"
+              }
+            ]
+          },
+          "options": {
+            "allowUnauthorizedCerts": true
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          -800,
+          304
+        ],
+        "id": "ad7d9cad-0a95-4f40-988c-a2667fbab684",
+        "name": "小红书解析获取地址"
+      },
+      {
+        "parameters": {
+          "jsCode": "// n8n Function节点 - 检查JSON数据中的imgurl参数\n// 如果有imgurl参数，返回imgurl和内容；如果没有，返回url和内容\n\n// n8n工作流数据接收\nconst response = $json;\n\nconsole.log('🔍 开始检查JSON数据中的图片参数...');\n\n// 主处理函数\nfunction checkImgUrlParameter(data) {\n    console.log('📥 输入数据:', JSON.stringify(data, null, 2));\n    \n    // 检查数据格式\n    if (!data || typeof data !== 'object') {\n        return {\n            success: false,\n            message: '输入数据格式错误',\n            result: null,\n            parameter_type: 'invalid',\n            parameter_value: null\n        };\n    }\n    \n    // 检查是否有data字段\n    if (!data.data || typeof data.data !== 'object') {\n        return {\n            success: false,\n            message: '缺少data字段或data字段格式错误',\n            result: null,\n            parameter_type: 'invalid',\n            parameter_value: null\n        };\n    }\n    \n    const dataObj = data.data;\n    \n    // 检查是否有imgurl参数\n    if (dataObj.hasOwnProperty('imgurl')) {\n        console.log('✅ 找到imgurl参数');\n        \n        // 处理imgurl内容\n        let imgurlContent = dataObj.imgurl;\n        \n        // 如果imgurl是数组，处理数组内容\n        if (Array.isArray(imgurlContent)) {\n            console.log(`📷 imgurl是数组，包含 ${imgurlContent.length} 个元素`);\n            \n            // 清理和格式化数组内容\n            const cleanedImgUrls = imgurlContent.map(url => {\n                // 去除URL两端的空格和反引号\n                return url.trim().replace(/^`|`$/g, '').trim();\n            });\n            \n            return {\n                success: true,\n                message: '找到imgurl参数（数组格式）',\n                parameter_type: 'imgurl',\n                parameter_value: cleanedImgUrls,\n                count: cleanedImgUrls.length,\n                result: {\n                    imgurl: cleanedImgUrls\n                }\n            };\n        } \n        // 如果imgurl是字符串\n        else if (typeof imgurlContent === 'string') {\n            console.log('📷 imgurl是字符串');\n            \n            // 清理和格式化字符串内容\n            const cleanedImgUrl = imgurlContent.trim().replace(/^`|`$/g, '').trim();\n            \n            return {\n                success: true,\n                message: '找到imgurl参数（字符串格式）',\n                parameter_type: 'imgurl',\n                parameter_value: cleanedImgUrl,\n                count: 1,\n                result: {\n                    imgurl: cleanedImgUrl\n                }\n            };\n        }\n        // 其他格式的imgurl\n        else {\n            return {\n                success: true,\n                message: '找到imgurl参数（其他格式）',\n                parameter_type: 'imgurl',\n                parameter_value: imgurlContent,\n                count: 1,\n                result: {\n                    imgurl: imgurlContent\n                }\n            };\n        }\n    }\n    // 检查是否有url参数\n    else if (dataObj.hasOwnProperty('url')) {\n        console.log('✅ 未找到imgurl参数，但找到url参数');\n        \n        let urlContent = dataObj.url;\n        \n        // 处理url内容\n        if (typeof urlContent === 'string') {\n            const cleanedUrl = urlContent.trim().replace(/^`|`$/g, '').trim();\n            \n            return {\n                success: true,\n                message: '未找到imgurl参数，但找到url参数',\n                parameter_type: 'url',\n                parameter_value: cleanedUrl,\n                count: 1,\n                result: {\n                    url: cleanedUrl\n                }\n            };\n        } else {\n            return {\n                success: true,\n                message: '未找到imgurl参数，但找到url参数',\n                parameter_type: 'url',\n                parameter_value: urlContent,\n                count: 1,\n                result: {\n                    url: urlContent\n                }\n            };\n        }\n    }\n    // 检查其他可能的图片URL字段\n    else {\n        console.log('🔍 未找到imgurl和url参数，搜索其他图片相关字段...');\n        \n        // 搜索其他可能的图片URL字段\n        const imageFields = ['image', 'cover', 'avatar', 'picture', 'pic', 'thumbnail'];\n        let foundField = null;\n        let foundValue = null;\n        \n        for (const field of imageFields) {\n            if (dataObj.hasOwnProperty(field)) {\n                foundField = field;\n                foundValue = dataObj[field];\n                break;\n            }\n        }\n        \n        if (foundField) {\n            console.log(`✅ 找到替代字段: ${foundField}`);\n            \n            // 处理找到的字段内容\n            if (typeof foundValue === 'string') {\n                const cleanedValue = foundValue.trim().replace(/^`|`$/g, '').trim();\n                \n                return {\n                    success: true,\n                    message: `未找到imgurl参数，但找到${foundField}参数`,\n                    parameter_type: foundField,\n                    parameter_value: cleanedValue,\n                    count: 1,\n                    result: {\n                        [foundField]: cleanedValue\n                    }\n                };\n            } else {\n                return {\n                    success: true,\n                    message: `未找到imgurl参数，但找到${foundField}参数`,\n                    parameter_type: foundField,\n                    parameter_value: foundValue,\n                    count: 1,\n                    result: {\n                        [foundField]: foundValue\n                    }\n                };\n            }\n        } else {\n            console.log('❌ 未找到任何图片相关参数');\n            \n            return {\n                success: false,\n                message: '未找到imgurl、url或其他图片相关参数',\n                parameter_type: 'none',\n                parameter_value: null,\n                count: 0,\n                result: null\n            };\n        }\n    }\n}\n\n// 执行主函数\nconsole.log('🎯 开始处理n8n工作流数据...');\nconst result = checkImgUrlParameter(response);\n\nconsole.log('📊 处理结果:');\nconsole.log(`  - 成功: ${result.success}`);\nconsole.log(`  - 消息: ${result.message}`);\nconsole.log(`  - 参数类型: ${result.parameter_type}`);\nconsole.log(`  - 数量: ${result.count}`);\n\nif (result.success && result.result) {\n    console.log(`  - 返回内容: ${JSON.stringify(result.result, null, 2)}`);\n}\n\nconsole.log('✅ JSON数据检查完成');\n\n// 返回结果给n8n工作流\nreturn result;"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -576,
+          304
+        ],
+        "id": "d1999dd8-0b74-4879-9b2d-579611b8f6f6",
+        "name": "Code in JavaScript"
+      },
+      {
+        "parameters": {
+          "rules": {
+            "values": [
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "strict",
+                    "version": 2
+                  },
+                  "conditions": [
+                    {
+                      "leftValue": "={{ $json.parameter_type }}",
+                      "rightValue": "imgurl",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      },
+                      "id": "b044f1ca-d03c-4a69-99f2-a7eb70763c4f"
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "imgurl"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "strict",
+                    "version": 2
+                  },
+                  "conditions": [
+                    {
+                      "id": "ccb7c462-386a-4010-8208-c6befda57001",
+                      "leftValue": "={{ $json.parameter_type }}",
+                      "rightValue": "url",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals",
+                        "name": "filter.operator.equals"
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "url"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.switch",
+        "typeVersion": 3.3,
+        "position": [
+          -352,
+          304
+        ],
+        "id": "6dc7a042-849e-4b24-9ab9-bf154a6f8bb9",
+        "name": "Switch"
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "20abeee6-b5a5-46f9-b885-ed62786f134c",
+                "name": "url",
+                "value": "={{ $json.result.url }}",
+                "type": "string"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          48,
+          432
+        ],
+        "id": "6fb9d3bc-75d0-49c6-b439-490fc354a724",
+        "name": "小红书视频解析"
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "f70cb110-186a-487c-bf6d-1f1017f9b1c5",
+                "name": "images",
+                "value": "={{ $json.result.imgurl }}",
+                "type": "array"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          0,
+          144
+        ],
+        "id": "7c1a04bd-4b78-4176-a6fa-590785fb293e",
+        "name": "小红书图片解析"
+      },
+      {
+        "parameters": {
+          "jsCode": "// n8n Function节点 - 检查JSON数据中的images参数\n// 如果有images参数，返回images和内容；如果没有，返回url和内容\n\n// n8n工作流数据接收\nconst response = $json;\n\nconsole.log('🔍 开始检查JSON数据中的图片参数...');\n\n// 主处理函数\nfunction checkImagesParameter(data) {\n    console.log('📥 输入数据:', JSON.stringify(data, null, 2));\n    \n    // 检查数据格式\n    if (!data || typeof data !== 'object') {\n        return {\n            success: false,\n            message: '输入数据格式错误',\n            result: null,\n            parameter_type: 'invalid',\n            parameter_value: null,\n            count: 0\n        };\n    }\n    \n    // 检查是否有data字段\n    if (!data.data || typeof data.data !== 'object') {\n        return {\n            success: false,\n            message: '缺少data字段或data字段格式错误',\n            result: null,\n            parameter_type: 'invalid',\n            parameter_value: null,\n            count: 0\n        };\n    }\n    \n    const dataObj = data.data;\n    \n    // 检查是否有images参数且不为空\n    if (dataObj.hasOwnProperty('images') && dataObj.images != null) {\n        console.log('✅ 找到images参数');\n        \n        // 处理images内容\n        let imagesContent = dataObj.images;\n        \n        // 检查images是否为空\n        let isEmpty = false;\n        \n        // 如果images是数组，检查是否为空数组\n        if (Array.isArray(imagesContent)) {\n            if (imagesContent.length === 0) {\n                console.log('⚠️ images是空数组，视为不存在');\n                isEmpty = true;\n            } else {\n                console.log(`📷 images是数组，包含 ${imagesContent.length} 个元素`);\n                \n                // 清理和格式化数组内容\n                const cleanedImages = imagesContent.map(url => {\n                    // 去除URL两端的空格和反引号\n                    return url.trim().replace(/^`|`$/g, '').trim();\n                });\n                \n                return {\n                    success: true,\n                    message: '找到images参数（数组格式）',\n                    parameter_type: 'images',\n                    parameter_value: cleanedImages,\n                    count: cleanedImages.length,\n                    result: {\n                        images: cleanedImages\n                    }\n                };\n            }\n        } \n        // 如果images是字符串，检查是否为空字符串\n        else if (typeof imagesContent === 'string') {\n            if (imagesContent.trim() === '') {\n                console.log('⚠️ images是空字符串，视为不存在');\n                isEmpty = true;\n            } else {\n                console.log('📷 images是字符串');\n                \n                // 清理和格式化字符串内容\n                const cleanedImage = imagesContent.trim().replace(/^`|`$/g, '').trim();\n                \n                return {\n                    success: true,\n                    message: '找到images参数（字符串格式）',\n                    parameter_type: 'images',\n                    parameter_value: cleanedImage,\n                    count: 1,\n                    result: {\n                        images: cleanedImage\n                    }\n                };\n            }\n        }\n        // 其他格式的images，检查是否为null或undefined\n        else if (imagesContent === null || imagesContent === undefined) {\n            console.log('⚠️ images是null或undefined，视为不存在');\n            isEmpty = true;\n        }\n        // 其他格式的images\n        else {\n            return {\n                success: true,\n                message: '找到images参数（其他格式）',\n                parameter_type: 'images',\n                parameter_value: imagesContent,\n                count: 1,\n                result: {\n                    images: imagesContent\n                }\n            };\n        }\n        \n        // 如果images为空，继续检查其他参数\n        if (isEmpty) {\n            console.log('🔍 images参数为空，继续检查其他参数...');\n        } else {\n            // 如果images不为空，直接返回结果\n            return {\n                success: true,\n                message: '找到images参数',\n                parameter_type: 'images',\n                parameter_value: imagesContent,\n                count: 1,\n                result: {\n                    images: imagesContent\n                }\n            };\n        }\n    }\n    \n    // 检查是否有url参数且不为空\n    if (dataObj.hasOwnProperty('url') && dataObj.url != null) {\n        console.log('✅ 未找到images参数，但找到url参数');\n        \n        let urlContent = dataObj.url;\n        \n        // 处理url内容\n        if (typeof urlContent === 'string') {\n            const cleanedUrl = urlContent.trim().replace(/^`|`$/g, '').trim();\n            \n            return {\n                success: true,\n                message: '未找到images参数，但找到url参数',\n                parameter_type: 'url',\n                parameter_value: cleanedUrl,\n                count: 1,\n                result: {\n                    url: cleanedUrl\n                }\n            };\n        } else {\n            return {\n                success: true,\n                message: '未找到images参数，但找到url参数',\n                parameter_type: 'url',\n                parameter_value: urlContent,\n                count: 1,\n                result: {\n                    url: urlContent\n                }\n            };\n        }\n    }\n    // 检查其他可能的图片URL字段\n    else {\n        console.log('🔍 未找到images和url参数，搜索其他图片相关字段...');\n        \n        // 搜索其他可能的图片URL字段\n        const imageFields = ['image', 'cover', 'avatar', 'picture', 'pic', 'thumbnail', 'imgurl'];\n        let foundField = null;\n        let foundValue = null;\n        \n        for (const field of imageFields) {\n            if (dataObj.hasOwnProperty(field)) {\n                foundField = field;\n                foundValue = dataObj[field];\n                break;\n            }\n        }\n        \n        if (foundField) {\n            console.log(`✅ 找到替代字段: ${foundField}`);\n            \n            // 处理找到的字段内容\n            if (typeof foundValue === 'string') {\n                const cleanedValue = foundValue.trim().replace(/^`|`$/g, '').trim();\n                \n                return {\n                    success: true,\n                    message: `未找到images参数，但找到${foundField}参数`,\n                    parameter_type: foundField,\n                    parameter_value: cleanedValue,\n                    count: 1,\n                    result: {\n                        [foundField]: cleanedValue\n                    }\n                };\n            } else {\n                return {\n                    success: true,\n                    message: `未找到images参数，但找到${foundField}参数`,\n                    parameter_type: foundField,\n                    parameter_value: foundValue,\n                    count: 1,\n                    result: {\n                        [foundField]: foundValue\n                    }\n                };\n            }\n        } else {\n            console.log('❌ 未找到任何图片相关参数');\n            \n            return {\n                success: false,\n                message: '未找到images、url或其他图片相关参数',\n                parameter_type: 'none',\n                parameter_value: null,\n                count: 0,\n                result: null\n            };\n        }\n    }\n}\n\n// 执行主函数\nconsole.log('🎯 开始处理n8n工作流数据...');\nconst result = checkImagesParameter(response);\n\nconsole.log('📊 处理结果:');\nconsole.log(`  - 成功: ${result.success}`);\nconsole.log(`  - 消息: ${result.message}`);\nconsole.log(`  - 参数类型: ${result.parameter_type}`);\nconsole.log(`  - 数量: ${result.count}`);\n\nif (result.success && result.result) {\n    console.log(`  - 返回内容: ${JSON.stringify(result.result, null, 2)}`);\n}\n\nconsole.log('✅ JSON数据检查完成');\n\n// 返回结果给n8n工作流\nreturn result;"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -592,
+          112
+        ],
+        "id": "8583360d-7c56-4734-8dd5-f61a658cfb24",
+        "name": "Code in JavaScript1"
+      },
+      {
+        "parameters": {
+          "rules": {
+            "values": [
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "strict",
+                    "version": 2
+                  },
+                  "conditions": [
+                    {
+                      "leftValue": "={{ $json.parameter_type }}",
+                      "rightValue": "images",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      },
+                      "id": "34bc6e42-7808-4669-862f-fee0b11f0c87"
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "images"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "strict",
+                    "version": 2
+                  },
+                  "conditions": [
+                    {
+                      "id": "065c7439-48cf-409f-bf40-c9c985bd9e94",
+                      "leftValue": "={{ $json.parameter_type }}",
+                      "rightValue": "url",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals",
+                        "name": "filter.operator.equals"
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "url"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.switch",
+        "typeVersion": 3.3,
+        "position": [
+          -384,
+          112
+        ],
+        "id": "aae02ae5-9b6d-41a2-ae0a-9ddface7094b",
+        "name": "Switch1"
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "b3ef2a19-e2cd-4d48-96e0-f34fdcc51df0",
+                "name": "images",
+                "value": "={{ $json.result.images }}",
+                "type": "array"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          0,
+          0
+        ],
+        "id": "fb130098-be10-4044-9000-41e7d62f1cdc",
+        "name": "抖音图片解析"
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "4d042191-8af8-4937-ae4c-301bb07a5028",
+                "name": "url",
+                "value": "={{ $json.result.url }}",
+                "type": "string"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          48,
+          288
+        ],
+        "id": "d5ad7c76-9b2b-4daa-b701-6911759b40c6",
+        "name": "抖音视频解析"
+      },
+      {
+        "parameters": {
+          "aggregate": "aggregateAllItemData",
+          "options": {
+            "includeBinaries": true
+          }
+        },
+        "type": "n8n-nodes-base.aggregate",
+        "typeVersion": 1,
+        "position": [
+          304,
+          64
+        ],
+        "id": "98880f8f-be19-4f00-ab3e-afe1854412ef",
+        "name": "Aggregate"
+      },
+      {
+        "parameters": {
+          "aggregate": "aggregateAllItemData",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.aggregate",
+        "typeVersion": 1,
+        "position": [
+          304,
+          352
+        ],
+        "id": "592005f9-2188-45d2-9c0d-18ae6f79ecc8",
+        "name": "Aggregate1"
+      },
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "parserAll",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          -1952,
+          208
+        ],
+        "id": "f9f2bacf-51cb-4b0f-a7b7-6929d54fe702",
+        "name": "Webhook",
+        "webhookId": "2913aca4-3fb9-4ad9-a5ee-09f50d10aea1"
+      },
+      {
+        "parameters": {
+          "respondWith": "allIncomingItems",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.4,
+        "position": [
+          608,
+          64
+        ],
+        "id": "ee2e4361-9a94-4801-bd41-ae25e6ab01be",
+        "name": "Respond to Webhook"
+      },
+      {
+        "parameters": {
+          "respondWith": "allIncomingItems",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.4,
+        "position": [
+          608,
+          352
+        ],
+        "id": "8aac7940-1008-420b-983d-889562f85e55",
+        "name": "Respond to Webhook1"
+      }
+    ],
+    "connections": {
+      "提取URL地址": {
+        "main": [
+          [
+            {
+              "node": "获取平台信息",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "获取平台信息": {
+        "main": [
+          [
+            {
+              "node": "清理数据，保留平台信息与URL",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "清理数据，保留平台信息与URL": {
+        "main": [
+          [
+            {
+              "node": "根据信息选择对应工作流",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "根据信息选择对应工作流": {
+        "main": [
+          [
+            {
+              "node": "抖音视频解析获取地址",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "小红书解析获取地址",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "抖音视频解析获取地址": {
+        "main": [
+          [
+            {
+              "node": "Code in JavaScript1",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "小红书解析获取地址": {
+        "main": [
+          [
+            {
+              "node": "Code in JavaScript",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Code in JavaScript": {
+        "main": [
+          [
+            {
+              "node": "Switch",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Switch": {
+        "main": [
+          [
+            {
+              "node": "小红书图片解析",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "小红书视频解析",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Code in JavaScript1": {
+        "main": [
+          [
+            {
+              "node": "Switch1",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Switch1": {
+        "main": [
+          [
+            {
+              "node": "抖音图片解析",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "抖音视频解析",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "抖音视频解析": {
+        "main": [
+          [
+            {
+              "node": "Aggregate1",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "小红书视频解析": {
+        "main": [
+          [
+            {
+              "node": "Aggregate1",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "抖音图片解析": {
+        "main": [
+          [
+            {
+              "node": "Aggregate",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "小红书图片解析": {
+        "main": [
+          [
+            {
+              "node": "Aggregate",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Webhook": {
+        "main": [
+          [
+            {
+              "node": "提取URL地址",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Aggregate": {
+        "main": [
+          [
+            {
+              "node": "Respond to Webhook",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Aggregate1": {
+        "main": [
+          [
+            {
+              "node": "Respond to Webhook1",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "冷 布丁",
+    "name": "Version 65676e64",
+    "description": "",
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2025-12-16T12:40:44.761Z",
+        "id": 1,
+        "workflowId": "7QXGhmxnsH4ncMJS",
+        "versionId": "65676e64-145e-4f0c-80c9-e4d128aa3b49",
+        "event": "activated",
+        "userId": "c46ce840-de81-412d-a160-69fb3885a0dd"
+      }
+    ]
+  }
+}
