@@ -1,9 +1,13 @@
-# N8N工作流自动备份（仅手动触发+仅自定义名称+整体ZIP打包+保留最近7次备份）
+# N8N工作流自动备份（修复版）
 name: N8N工作流自动备份
 
-# 仅保留手动触发（删除schedule部分，只留workflow_dispatch）
+# 仅保留手动触发
 on:
-  workflow_dispatch:     # 仅支持手动触发，无自动备份
+  workflow_dispatch:
+
+# 【重要】授予 GITHUB_TOKEN 写入仓库的权限，否则无法推送
+permissions:
+  contents: write
 
 jobs:
   backup:
@@ -12,38 +16,44 @@ jobs:
       - name: 拉取仓库代码
         uses: actions/checkout@v4
 
-      # 安装基础工具
-      - name: 安装依赖工具（jq + curl + zip）
+      - name: 安装基础工具
         run: |
           sudo apt update && sudo apt install -y jq curl zip
           mkdir -p ./n8n-backups
 
-      - name: 导出n8n工作流（仅保留自定义名称+纯原始JSON+整体ZIP打包）
+      - name: 导出n8n工作流并打包
         env:
+          # 只需配置 n8n 的 Key，不需要混合 GitHub Token
           N8N_API_KEY: ${{ secrets.N8N_API_KEY }}
-          N8N_URL: "https://n8n.lbuding.com"  # 【需修改】你的n8n地址（无末尾/）
+          N8N_URL: "https://n8n.lbuding.com"  # 你的n8n地址
         run: |
           # ========== 1. 核心变量定义 ==========
           TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-          JSON_DIR=./n8n-backups/$TIMESTAMP
-          ZIP_FILE=./n8n-backups/n8n_backup_$TIMESTAMP.zip
-          mkdir -p $JSON_DIR
+          BACKUP_ROOT="./n8n-backups"
+          JSON_DIR="$BACKUP_ROOT/$TIMESTAMP"
+          ZIP_FILENAME="n8n_backup_$TIMESTAMP.zip"
+          ZIP_FILE_PATH="$BACKUP_ROOT/$ZIP_FILENAME"
+          
+          mkdir -p "$JSON_DIR"
 
           # ========== 2. 请求工作流列表 ==========
+          echo "正在连接 N8N: $N8N_URL ..."
           WORKFLOW_LIST_RESPONSE=$(curl -s -X GET "$N8N_URL/api/v1/workflows" \
             -H "X-N8N-API-KEY: $N8N_API_KEY" \
-            -H "Content-Type: application/json" | jq '.' 2>/dev/null)
+            -H "Content-Type: application/json")
 
-          if [ -z "$WORKFLOW_LIST_RESPONSE" ] || ! echo "$WORKFLOW_LIST_RESPONSE" | jq . >/dev/null 2>&1; then
-            echo "错误：无法获取n8n工作流列表，请检查地址和密钥"
+          # 检查 API 返回是否包含 data 字段
+          if ! echo "$WORKFLOW_LIST_RESPONSE" | jq -e '.data' >/dev/null 2>&1; then
+            echo "错误：无法获取工作流列表，响应内容："
+            echo "$WORKFLOW_LIST_RESPONSE" | head -n 10
             exit 1
           fi
 
-          # ========== 3. 解析ID并导出JSON（仅保留自定义名称） ==========
+          # ========== 3. 解析并导出JSON ==========
           WORKFLOW_IDS=$(echo "$WORKFLOW_LIST_RESPONSE" | jq -r '.data[].id')
           BACKUP_COUNT=0
 
-          # 定义函数：处理同名文件（自动加序号，避免覆盖）
+          # 定义重名处理函数
           get_unique_filename() {
             local base_dir=$1
             local filename=$2
@@ -51,116 +61,85 @@ jobs:
             local name_without_ext=${filename%.*}
             local unique_filename=$filename
             local counter=1
-
             while [ -f "$base_dir/$unique_filename" ]; do
               unique_filename="${name_without_ext}_${counter}.${extension}"
               counter=$((counter + 1))
             done
-
             echo "$unique_filename"
           }
 
           for ID in $WORKFLOW_IDS; do
-            if [ "$ID" = "null" ] || [ -z "$ID" ] || [ "$ID" = "[]" ]; then
-              continue
-            fi
+            if [ -z "$ID" ] || [ "$ID" = "null" ]; then continue; fi
 
-            # ========== 4. 仅保留N8N自定义名称（去掉ID） ==========
-            WORKFLOW_NAME=$(echo "$WORKFLOW_LIST_RESPONSE" | jq -r --arg ID "$ID" '.data[] | select(.id == $ID) | .name')
-            # 处理非法字符（保留中文，替换\/:*?"<>|和空格为下划线）
-            WORKFLOW_NAME=$(printf "%s" "$WORKFLOW_NAME" | iconv -f UTF-8 -t UTF-8//TRANSLIT | sed -e 's/[\/\\:*?"<>|]/_/g' -e 's/ /_/g' -e 's/^[. ]//g')
-            # 兜底名称
-            if [ "$WORKFLOW_NAME" = "null" ] || [ -z "$WORKFLOW_NAME" ]; then
-              WORKFLOW_NAME="未命名工作流"
-            fi
-
-            # 最终文件名：仅自定义名称.json（去掉ID后缀）
-            FILE_NAME="${WORKFLOW_NAME}.json"
-            # 可选：处理同名文件（注释则关闭）
+            # 获取名称并清洗特殊字符
+            RAW_NAME=$(echo "$WORKFLOW_LIST_RESPONSE" | jq -r --arg ID "$ID" '.data[] | select(.id == $ID) | .name')
+            SAFE_NAME=$(echo "$RAW_NAME" | sed -e 's/[\/\\:*?"<>|]/_/g' -e 's/ /_/g')
+            
+            if [ -z "$SAFE_NAME" ] || [ "$SAFE_NAME" = "null" ]; then SAFE_NAME="未命名_$ID"; fi
+            
+            FILE_NAME="${SAFE_NAME}.json"
             FILE_NAME=$(get_unique_filename "$JSON_DIR" "$FILE_NAME")
 
-            echo "===== 开始备份工作流：$FILE_NAME ====="
-
-            # ========== 5. 获取纯原始JSON数据 ==========
+            # 获取详情
             WORKFLOW_DETAIL=$(curl -s -X GET "$N8N_URL/api/v1/workflows/$ID" \
-              -H "X-N8N-API-KEY: $N8N_API_KEY" \
-              -H "Content-Type: application/json" | jq '.' 2>/dev/null)
+              -H "X-N8N-API-KEY: $N8N_API_KEY" | jq '.')
 
-            if [ -z "$WORKFLOW_DETAIL" ] || ! echo "$WORKFLOW_DETAIL" | jq . >/dev/null 2>&1; then
-              echo "警告：工作流$ID的JSON无效，跳过"
-              continue
-            fi
-
-            # ========== 6. 保存JSON文件 ==========
-            JSON_FILE_PATH="$JSON_DIR/$FILE_NAME"
-            echo "$WORKFLOW_DETAIL" | jq . | tee "$JSON_FILE_PATH" >/dev/null
-
-            if [ -s "$JSON_FILE_PATH" ]; then
+            if echo "$WORKFLOW_DETAIL" | jq -e '.id' >/dev/null 2>&1; then
+              echo "$WORKFLOW_DETAIL" > "$JSON_DIR/$FILE_NAME"
+              echo "✅ 已备份: $FILE_NAME"
               BACKUP_COUNT=$((BACKUP_COUNT + 1))
-              echo "===== 已备份：$JSON_FILE_PATH ====="
             else
-              echo "警告：文件$FILE_NAME生成失败，跳过"
-              rm -f "$JSON_FILE_PATH"
+              echo "⚠️  警告: 工作流 $SAFE_NAME 导出失败"
             fi
           done
 
-          # ========== 7. 整体打包为ZIP ==========
+          # ========== 4. 打包 ZIP ==========
           if [ $BACKUP_COUNT -gt 0 ]; then
-            echo "===== 开始整体打包为ZIP：$ZIP_FILE ====="
-            cd ./n8n-backups && zip -r -q -9 "$(basename $ZIP_FILE)" "$TIMESTAMP"
-            cd - >/dev/null
-
-            # 可选：删除原始JSON目录（注释则保留）
-            rm -rf "$JSON_DIR"
-
-            # 验证ZIP包
-            if [ -s "$ZIP_FILE" ]; then
-              echo "===== 成功生成ZIP包：$ZIP_FILE（大小：$(du -h $ZIP_FILE | awk '{print $1}')） ====="
-              md5sum "$ZIP_FILE" | tee "$ZIP_FILE.md5"
-            else
-              echo "错误：ZIP包生成失败"
-              exit 1
-            fi
+            echo "===== 开始打包 ZIP ====="
+            # 切换目录打包，避免 zip 包含层级路径
+            cd "$BACKUP_ROOT"
+            zip -r -q -9 "$ZIP_FILENAME" "$TIMESTAMP"
+            
+            # 生成 MD5 校验文件
+            md5sum "$ZIP_FILENAME" > "${ZIP_FILENAME}.md5"
+            echo "📦 ZIP 生成完毕: $ZIP_FILENAME"
+            
+            # 删除原始 JSON 文件夹，只留 ZIP
+            rm -rf "$TIMESTAMP"
+            cd - > /dev/null
           else
-            echo "警告：未备份任何工作流，跳过打包"
+            echo "❌ 没有备份任何文件，退出"
             rm -rf "$JSON_DIR"
-            exit 0
+            exit 1
           fi
 
-          # ========== 8. 清理旧备份（仅保留最近7次备份） ==========
-          echo "===== 开始清理旧备份，仅保留最近7次 ======"
-          # 进入备份目录
-          cd ./n8n-backups || exit 1
+          # ========== 5. 清理旧备份 (关键修正) ==========
+          echo "===== 清理旧备份 (保留最近7份: 7个zip + 7个md5 = 14个文件) ====="
+          cd "$BACKUP_ROOT" || exit 1
+          
+          # 逻辑修正：
+          # 1. ls -tp: 按时间倒序（最新的在上面）
+          # 2. grep: 只选 zip 和 md5
+          # 3. tail -n +15: 跳过前14行（即跳过最新的14个文件），从第15行（旧文件）开始输出
+          # 4. xargs rm: 删除这些旧文件
+          
+          ls -tp | grep -E '^n8n_backup_.*\.(zip|md5)$' | grep -v '/$' | tail -n +15 | xargs -I {} rm -- {} || true
+          
+          echo "🧹 清理完成，当前剩余备份数："
+          ls -tp | grep -E '\.zip$' | head -n 10
+          cd - > /dev/null
 
-          # 筛选备份文件（zip+md5），按时间排序，保留最后14个（7个zip+7个md5），删除旧的
-          ls -tp | grep -E '^n8n_backup_.*\.(zip|md5)$' | grep -v '/$' | head -n -14 | xargs -I {} rm -f {} || echo "暂无需要清理的旧备份"
-
-          # 回到原目录
-          cd - >/dev/null
-          echo "===== 旧备份清理完成 ======"
-
-      # ========== 9. 提交并推送 ==========
-      - name: 提交并推送ZIP备份包到GitHub
-        env:
-          SINGLE_SECRET: ${{ secrets.N8N_API_KEY }}
-          GITHUB_REPO_URL: "https://github.com/lengbuding1991/n8n-backups.git"  # 【需修改】你的仓库地址
+      - name: 提交并推送
         run: |
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
-
-          # 适配PAT推送
-          if echo "$SINGLE_SECRET" | grep -q "|||"; then
-            GITHUB_PAT=$(echo "$SINGLE_SECRET" | cut -d'|||' -f2)
-            PUSH_URL=$(echo "$GITHUB_REPO_URL" | sed "s/https:\/\//https:\/\/$GITHUB_PAT@/")
-          else
-            PUSH_URL="$GITHUB_REPO_URL"
-          fi
-
-          # 推送文件
-          if [ -n "$(ls -A ./n8n-backups 2>/dev/null)" ]; then
+          
+          if [ -n "$(git status --porcelain)" ]; then
             git add ./n8n-backups
-            git commit -m "n8n工作流备份_$(date +%Y%m%d_%H%M%S)（仅自定义名称+整体ZIP打包+保留最近7次备份）"
-            git push "$PUSH_URL" main
+            git commit -m "n8n自动备份 $(date +%Y-%m-%d) [Action]"
+            # 直接推送到当前仓库，使用内置 Token
+            git push origin HEAD:main
+            echo "🚀 推送成功"
           else
-            echo "无备份文件，跳过推送"
+            echo "无文件变动，跳过提交"
           fi
